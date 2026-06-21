@@ -1,6 +1,6 @@
 import { identifyObject } from "./claude";
 import { generateAnymonSprite } from "./gemini";
-import { create3D, get3D, is3DMock } from "./threed";
+import { create3D, get3D, is3DMock, provider } from "./threed";
 import { placeholderSprite, sampleGlb } from "./placeholder";
 import type { Anymon } from "./types";
 
@@ -66,10 +66,16 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
   // 3) kick off 3D (mock if no provider configured)
   let meshyTaskId = "mock";
   if (!is3DMock()) {
-    try {
-      meshyTaskId = await create3D(sprite);
-    } catch (e) {
-      console.error("create3D failed", e);
+    if (provider() === "hfspace") {
+      // Generation is started as a background job by the capture route (it needs
+      // the saved Anymon id). Just flag it here; fall back to mock without a token.
+      meshyTaskId = process.env.HF_TOKEN ? "hfspace" : "mock";
+    } else {
+      try {
+        meshyTaskId = await create3D(sprite);
+      } catch (e) {
+        console.error("create3D failed", e);
+      }
     }
   }
 
@@ -90,6 +96,20 @@ export async function resolveGlb(
 ): Promise<{ status: Anymon["status"]; glbUrl: string | null; progress: number }> {
   if (a.status === "ready" && a.glbUrl) {
     return { status: "ready", glbUrl: a.glbUrl, progress: 100 };
+  }
+
+  // HF Space: a background job updates the Anymon directly. We just report
+  // progress here, and hand back a sample model if that job failed.
+  if (a.meshyTaskId === "hfspace") {
+    if (a.status === "failed") {
+      return { status: "ready", glbUrl: sampleGlb(hash(a.id)), progress: 100 };
+    }
+    const elapsed = Date.now() - a.createdAt;
+    return {
+      status: "incubating",
+      glbUrl: null,
+      progress: Math.min(95, 15 + Math.round(elapsed / 2000)),
+    };
   }
 
   if (!a.meshyTaskId || a.meshyTaskId === "mock" || is3DMock()) {

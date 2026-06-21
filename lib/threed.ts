@@ -1,16 +1,18 @@
 import { createImageTo3D as meshyCreate, getImageTo3D as meshyGet } from "./meshy";
 
 // Pluggable image -> 3D backend. Choose with MODEL_3D_PROVIDER, or it auto-detects:
-//   meshy   -> hosted Meshy API (needs MESHY_API_KEY)         [paid]
-//   trellis -> your own TRELLIS HTTP server (needs TRELLIS_API_URL) [free/self-hosted, GPU]
+//   meshy   -> hosted Meshy API (needs MESHY_API_KEY)              [paid]
+//   trellis -> your own TRELLIS HTTP server (needs TRELLIS_API_URL) [free/self-hosted GPU]
+//   hfspace -> HF Space "microsoft/TRELLIS.2" (needs HF_TOKEN)      [free GPU, daily quota]
 //   mock    -> placeholder sample .glb (no keys, instant demo)
-export type Provider = "meshy" | "trellis" | "mock";
+export type Provider = "meshy" | "trellis" | "hfspace" | "mock";
 
 export function provider(): Provider {
   const p = (process.env.MODEL_3D_PROVIDER || "").toLowerCase();
-  if (p === "meshy" || p === "trellis" || p === "mock") return p;
+  if (p === "meshy" || p === "trellis" || p === "hfspace" || p === "mock") return p;
   if (process.env.TRELLIS_API_URL) return "trellis";
   if (process.env.MESHY_API_KEY) return "meshy";
+  if (process.env.HF_TOKEN) return "hfspace";
   return "mock";
 }
 

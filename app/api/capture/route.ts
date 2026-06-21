@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { runCapture } from "@/lib/pipeline";
 import { getCurrentUser } from "@/lib/auth-helpers";
+import { provider, is3DMock } from "@/lib/threed";
+import { startHfGeneration } from "@/lib/hfspace";
 import { MAX_DECK } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -43,6 +45,12 @@ export async function POST(req: Request) {
     });
 
     await store.saveAnymon(anymon);
+
+    // Start the HF Space 3D generation in the background (doesn't block the
+    // instant-2D response). The job writes glbUrl back onto the Anymon.
+    if (!is3DMock() && provider() === "hfspace" && anymon.meshyTaskId === "hfspace") {
+      void startHfGeneration(anymon.id, anymon.spriteDataUri);
+    }
 
     return NextResponse.json({
       id: anymon.id,

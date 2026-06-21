@@ -11,16 +11,24 @@ export default function SignIn() {
   const go = async (provider: "google" | "guest") => {
     setError(null);
     setBusy(provider);
-    const res = await signIn(provider, { redirect: false });
-    if (res?.error) {
-      setError(
-        provider === "guest"
-          ? "guest mode is off (set ALLOW_GUEST=1)"
-          : "google sign-in isn't configured yet",
-      );
+    try {
+      if (provider === "google") {
+        // OAuth needs a full-page redirect to Google (and back to "/").
+        await signIn("google", { callbackUrl: "/" });
+        return; // page navigates away
+      }
+      // Guest uses credentials -> no redirect; refresh once the session is set.
+      const res = await signIn("guest", { redirect: false });
+      if (res?.error) {
+        setError("guest mode is off — set ALLOW_GUEST=1 and restart the server");
+        setBusy(null);
+        return;
+      }
+      window.location.reload();
+    } catch {
+      setError("sign-in failed");
       setBusy(null);
     }
-    // On success next-auth updates the session; the app re-renders.
   };
 
   return (

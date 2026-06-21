@@ -53,11 +53,12 @@ No `REDIS_URL` = in-memory store (single process, resets on restart, not shared 
 
 Set `MODEL_3D_PROVIDER` (or let it auto-detect):
 
+- `hfspace` — **free GPU, no hardware needed**. Uses the Hugging Face Space `microsoft/TRELLIS.2`. Just set `HF_TOKEN` (free). Runs as a background job so the 2D sprite still shows instantly while the 3D bakes. Subject to ZeroGPU daily quota (~5 min free, ~40 min PRO) + a shared queue. The output `.glb` is fetched through a same-origin proxy ([app/api/glb/route.ts](app/api/glb/route.ts)).
+- `trellis` — **free & open-source, self-hosted**. Needs an NVIDIA GPU (local or a cloud GPU like RunPod). Run the included [trellis_server](trellis_server/README.md) and set `TRELLIS_API_URL`.
 - `meshy` — hosted, paid, zero setup. Needs `MESHY_API_KEY`.
-- `trellis` — **free & open-source, self-hosted**. Needs an NVIDIA GPU. Run the included [trellis_server](trellis_server/README.md) and set `TRELLIS_API_URL`.
-- `mock` — sample `.glb` models, no keys, for demos.
+- `mock` — sample `.glb` models, no keys, for demos / guaranteed fallback.
 
-Is TRELLIS viable instead of Meshy? Yes if you have an NVIDIA GPU (locally or on a cloud GPU) — it's comparable quality at $0. It is **not** viable on a laptop without a capable NVIDIA GPU; CPU-only isn't practical. See [trellis_server/README.md](trellis_server/README.md).
+No GPU and no paid credits? Use `hfspace` (set `MODEL_3D_PROVIDER=hfspace` + `HF_TOKEN`). If you do have a GPU (or RunPod credits), `trellis` is unlimited and self-hosted. Keep `mock` as a stage fallback in case you hit ZeroGPU quota live.
 
 ## Test camera + GPS on iPhone
 

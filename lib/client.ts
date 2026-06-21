@@ -59,9 +59,14 @@ export interface MeResponse {
 }
 
 export async function apiMe(): Promise<MeResponse> {
-  const res = await fetch("/api/me", { cache: "no-store" });
-  if (res.status === 401) return { authenticated: false };
-  return res.json();
+  try {
+    const res = await fetch("/api/me", { cache: "no-store" });
+    const text = await res.text();
+    if (!res.ok || !text) return { authenticated: false };
+    return JSON.parse(text) as MeResponse;
+  } catch {
+    return { authenticated: false };
+  }
 }
 
 export async function apiSetUsername(

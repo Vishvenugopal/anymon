@@ -238,7 +238,17 @@ export function getStore(): Store {
     const IORedis = require("ioredis") as typeof import("ioredis").default;
     const g = globalThis as unknown as { __anymonRedis?: Redis };
     if (!g.__anymonRedis) {
-      g.__anymonRedis = new IORedis(url, { maxRetriesPerRequest: 3 });
+      const client = new IORedis(url, {
+        maxRetriesPerRequest: 3,
+        keepAlive: 10000, // TCP keepalive to reduce idle disconnects
+        retryStrategy: (times) => Math.min(times * 200, 2000),
+      });
+      // Handle 'error' so transient drops (ECONNRESET on idle) don't surface as
+      // "Unhandled error event"; ioredis reconnects automatically.
+      client.on("error", (e) =>
+        console.warn("[redis] connection error (auto-reconnecting):", e.message),
+      );
+      g.__anymonRedis = client;
     }
     store = new RedisStore(g.__anymonRedis);
   } else {
