@@ -43,20 +43,36 @@ function requestOrientationPermission() {
 function useDeviceTilt(enabled: boolean): { rx: number; ry: number } | null {
   const [tilt, setTilt] = useState<{ rx: number; ry: number } | null>(null);
   const restRef = useRef<{ beta: number; gamma: number } | null>(null);
+  const smoothRef = useRef<{ rx: number; ry: number }>({ rx: 0, ry: 0 });
+  const lastRef = useRef<{ rx: number; ry: number }>({ rx: 0, ry: 0 });
 
   useEffect(() => {
     if (!enabled) {
       setTilt(null);
       restRef.current = null;
+      smoothRef.current = { rx: 0, ry: 0 };
+      lastRef.current = { rx: 0, ry: 0 };
       return;
     }
+    const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
     const onOrient = (e: DeviceOrientationEvent) => {
       if (e.beta == null || e.gamma == null) return;
       if (!restRef.current) restRef.current = { beta: e.beta, gamma: e.gamma };
-      const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
-      const db = e.beta - restRef.current.beta; // tilt toward/away from you
-      const dg = e.gamma - restRef.current.gamma; // tilt left/right
-      setTilt({ rx: clamp(db * 0.7, 18), ry: clamp(dg * 0.7, 18) });
+      const rawX = clamp((e.beta - restRef.current.beta) * 0.6, 16); // toward/away
+      const rawY = clamp((e.gamma - restRef.current.gamma) * 0.6, 16); // left/right
+      // The accelerometer is noisy; feeding raw values straight to the spring
+      // makes the card jitter. Low-pass filter, then only re-render when it
+      // actually moved >0.4° (kills the sub-degree churn that caused jitter).
+      const sm = smoothRef.current;
+      sm.rx += (rawX - sm.rx) * 0.12;
+      sm.ry += (rawY - sm.ry) * 0.12;
+      if (
+        Math.abs(sm.rx - lastRef.current.rx) > 0.4 ||
+        Math.abs(sm.ry - lastRef.current.ry) > 0.4
+      ) {
+        lastRef.current = { rx: sm.rx, ry: sm.ry };
+        setTilt({ rx: Math.round(sm.rx * 10) / 10, ry: Math.round(sm.ry * 10) / 10 });
+      }
     };
     window.addEventListener("deviceorientation", onOrient, true);
     return () => window.removeEventListener("deviceorientation", onOrient, true);

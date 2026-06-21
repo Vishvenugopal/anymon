@@ -60,6 +60,13 @@ export interface MeshyStatus {
   progress: number;
 }
 
+// Meshy serves the .glb from a CloudFront CDN with no CORS headers, so the
+// browser's GLTF loader can't fetch it directly ("Load Failed"). Route it
+// through our same-origin /api/glb proxy (the signed query string is preserved).
+function proxiedGlb(url: string): string {
+  return `/api/glb?u=${encodeURIComponent(url)}`;
+}
+
 export async function getImageTo3D(taskId: string): Promise<MeshyStatus> {
   const res = await fetch(`${BASE}/image-to-3d/${taskId}`, {
     headers: authHeaders(),
@@ -75,6 +82,6 @@ export async function getImageTo3D(taskId: string): Promise<MeshyStatus> {
   return {
     status: data.status,
     progress: data.progress ?? 0,
-    glbUrl: data.model_urls?.glb ?? null,
+    glbUrl: data.model_urls?.glb ? proxiedGlb(data.model_urls.glb) : null,
   };
 }

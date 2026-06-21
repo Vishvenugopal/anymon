@@ -2,9 +2,13 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-// Same-origin proxy for remote .glb files (e.g. Hugging Face Space outputs) so
-// the 3D viewer never hits cross-origin/CORS issues. Allow-listed hosts only.
-const ALLOWED = [".hf.space", "huggingface.co", "hf.co"];
+// Same-origin proxy for remote .glb files so the 3D viewer never hits
+// cross-origin/CORS issues. Meshy serves models from a CloudFront CDN
+// (assets.meshy.ai) that sends NO CORS headers, so the browser's GLTF loader
+// fails with "Load Failed" on a direct fetch — proxying through our own origin
+// fixes it. Allow-listed hosts only.
+const HF_HOSTS = [".hf.space", "huggingface.co", "hf.co"];
+const ALLOWED = [...HF_HOSTS, "assets.meshy.ai", ".meshy.ai"];
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
@@ -25,7 +29,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "host not allowed" }, { status: 400 });
   }
 
-  const token = process.env.HF_TOKEN;
+  // Only HF needs an auth header; Meshy URLs are pre-signed (signature in the
+  // query string) and must NOT receive a stray bearer token.
+  const isHf = HF_HOSTS.some((h) => host === h || host.endsWith(h));
+  const token = isHf ? process.env.HF_TOKEN : undefined;
   const upstream = await fetch(target.toString(), {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });

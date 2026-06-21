@@ -453,43 +453,41 @@ export default function BattleScreen({
         )}
       </div>
 
-      {/* Top controls bar — in-flow (not absolute) so the enemy HP box sits
-          BELOW the give-up / AR-toggle buttons instead of under them. */}
-      <div className="relative z-30 flex items-start justify-between p-3">
-        {phase !== "result" ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              giveUp();
-            }}
-            className="rounded-gummy border-2 border-anymon-edgeberry bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-berry shadow-[0_2px_0_0_#9E2138] active:translate-y-[2px] active:shadow-none"
-          >
-            give up
-          </button>
-        ) : (
-          <span />
-        )}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setArOn((v) => !v);
-          }}
-          className="rounded-gummy border-2 border-anymon-edgecloud bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-ink shadow-[0_2px_0_0_#C2D5CC] active:translate-y-[2px] active:shadow-none"
-        >
-          {arOn ? "ar: on" : "ar: off"}
-        </button>
-      </div>
+      {/* AR / non-AR toggle — floats top-right (absolute = no layout height) */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setArOn((v) => !v);
+        }}
+        className="absolute right-3 top-3 z-30 rounded-gummy border-2 border-anymon-edgecloud bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-ink shadow-[0_2px_0_0_#C2D5CC] active:translate-y-[2px] active:shadow-none"
+      >
+        {arOn ? "ar: on" : "ar: off"}
+      </button>
 
-      {/* ARENA — vertically balanced in the available space */}
-      <div className="relative z-10 flex flex-1 flex-col justify-center gap-6 px-4 py-4">
-        {/* ENEMY */}
+      {/* ARENA — min-h-0 lets it shrink so the move menu below always fits
+          (the move tiles were getting clipped at the bottom). */}
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col justify-center gap-4 px-4 py-3">
+        {/* ENEMY — give-up sits directly BELOW the enemy name/HP box */}
         <div className="flex items-start justify-between">
-          <HpBar
-            hp={dHp}
-            max={defender.maxHp}
-            name={defender.name}
-            rarity={defender.rarity}
-          />
+          <div className="flex flex-col items-start gap-2">
+            <HpBar
+              hp={dHp}
+              max={defender.maxHp}
+              name={defender.name}
+              rarity={defender.rarity}
+            />
+            {phase !== "result" && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  giveUp();
+                }}
+                className="rounded-gummy border-2 border-anymon-edgeberry bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-berry shadow-[0_2px_0_0_#9E2138] active:translate-y-[2px] active:shadow-none"
+              >
+                give up
+              </button>
+            )}
+          </div>
           <Fighter
             glbUrl={defender.glbUrl}
             sprite={defender.spriteDataUri}

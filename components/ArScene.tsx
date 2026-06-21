@@ -12,7 +12,6 @@ import {
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   Billboard,
-  ContactShadows,
   Html,
   useAnimations,
   useFBX,
@@ -99,7 +98,7 @@ function depthCues(distM: number) {
   return {
     height: THREE.MathUtils.lerp(1.8, 0.55, t), // noticeable scale range
     opacity: 1, // models/sprites stay fully opaque (distance read via size+lift)
-    lift: THREE.MathUtils.lerp(0.55, 1.15, t), // far ones sit higher (horizon)
+    lift: THREE.MathUtils.lerp(0.7, 1.3, t), // float a touch off the floor; far = higher
   };
 }
 
@@ -125,6 +124,7 @@ function WildModel({
         mesh.material = Array.isArray(mesh.material)
           ? mesh.material.map((m) => m.clone())
           : mesh.material.clone();
+        mesh.castShadow = true; // cast onto the ground shadow-catcher
       }
     });
     return c;
@@ -185,34 +185,66 @@ function WildSprite({
   );
 }
 
-// Scripted wandering: lerp toward random nearby targets, face travel direction.
+// Scripted "walking": stroll to a random nearby spot, pause, repeat — faking a
+// walk cycle on the otherwise-static GLB with a stepping bounce + side-to-side
+// waddle while moving, and a slow gentle bob while idle. The model has no
+// skeleton, so the gait is all transform.
 function useWander(ref: React.RefObject<THREE.Group>, seed: number) {
   const state = useRef({
     cur: new THREE.Vector2(0, 0),
     target: new THREE.Vector2(0, 0),
-    phase: seed % 6.28,
+    idle: seed % 6.28, // slow idle-bob phase
+    step: seed % 6.28, // footstep phase (drives bounce + waddle)
+    pause: 0.5 + (seed % 1.3), // seconds to stand still before next stroll
+    moving: false,
   });
+
   useFrame((_, delta) => {
     const g = ref.current;
     if (!g) return;
     const s = state.current;
-    const d = s.cur.distanceTo(s.target);
-    if (d < 0.08) {
+    const dt = Math.min(delta, 0.05); // clamp so big frame gaps don't teleport
+    const dist = s.cur.distanceTo(s.target);
+
+    if (s.pause > 0) {
+      s.pause -= dt;
+      s.moving = false;
+    } else if (dist < 0.06) {
+      // Arrived — stand a beat, then pick a new nearby spot to wander toward.
+      s.pause = 0.7 + Math.random() * 1.8;
       const a = Math.random() * Math.PI * 2;
-      const rad = 0.4 + Math.random() * 1.1;
+      const rad = 0.6 + Math.random() * 1.6;
       s.target.set(Math.cos(a) * rad, Math.sin(a) * rad);
+      s.moving = false;
+    } else {
+      s.moving = true;
     }
-    s.cur.lerp(s.target, clamp(delta * 0.6, 0, 0.1));
-    g.position.x = s.cur.x;
-    g.position.z = s.cur.y;
-    s.phase += delta * 1.7;
-    g.position.y = Math.sin(s.phase) * 0.07;
-    // Face travel direction.
-    const dx = s.target.x - s.cur.x;
-    const dz = s.target.y - s.cur.y;
-    if (dx * dx + dz * dz > 0.001) {
-      const yaw = Math.atan2(dx, dz);
-      g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, yaw, clamp(delta * 2, 0, 1));
+
+    if (s.moving) {
+      // Step toward the target at a leisurely walking pace.
+      const speed = 0.6;
+      const dirX = s.target.x - s.cur.x;
+      const dirZ = s.target.y - s.cur.y;
+      const len = Math.hypot(dirX, dirZ) || 1;
+      const stepLen = Math.min(len, speed * dt);
+      s.cur.x += (dirX / len) * stepLen;
+      s.cur.y += (dirZ / len) * stepLen;
+      g.position.x = s.cur.x;
+      g.position.z = s.cur.y;
+
+      // Face travel direction.
+      const yaw = Math.atan2(dirX, dirZ);
+      g.rotation.y = THREE.MathUtils.lerp(g.rotation.y, yaw, clamp(dt * 4, 0, 1));
+
+      // Footsteps: a quick bounce on each step + a small waddle roll.
+      s.step += dt * 7;
+      g.position.y = Math.abs(Math.sin(s.step)) * 0.1;
+      g.rotation.z = Math.sin(s.step) * 0.06;
+    } else {
+      // Idle: slow gentle breathing-bob, settle the waddle back upright.
+      s.idle += dt * 1.5;
+      g.position.y = 0.03 + Math.sin(s.idle) * 0.05;
+      g.rotation.z = THREE.MathUtils.lerp(g.rotation.z, 0, clamp(dt * 4, 0, 1));
     }
   });
 }
@@ -293,7 +325,14 @@ function WildEntity({
 // ---- a nearby trainer rendered as the shared Player.fbx ----
 function TrainerModel() {
   const fbx = useFBX("/models/Player.fbx");
-  const cloned = useMemo(() => fbx.clone(true), [fbx]);
+  const cloned = useMemo(() => {
+    const c = fbx.clone(true);
+    c.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh) mesh.castShadow = true;
+    });
+    return c;
+  }, [fbx]);
   const ref = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(cloned.animations ?? [], ref);
   // Trainers are human avatars, not Anymon — render them clearly TALLER than the
@@ -392,12 +431,6 @@ function TrainerEntity({
 function useDeviceOrientation() {
   const headingRef = useRef<number | null>(null);
   const pitchRef = useRef(0);
-  // The phone's tilt the moment AR starts becomes the neutral (level) pose, so
-  // the floor sits where it does on a laptop (level with the camera) regardless
-  // of the angle the phone is actually held at — then tilting up/down from there
-  // pans the world. (Absolute device HEIGHT isn't available from sensors, but
-  // calibrating the rest tilt is what actually fixes "the floor looks too high".)
-  const restBetaRef = useRef<number | null>(null);
   const [active, setActive] = useState(false);
   const activeRef = useRef(false);
 
@@ -412,11 +445,12 @@ function useDeviceOrientation() {
       if (h != null && !Number.isNaN(h)) {
         headingRef.current = ((h % 360) + 360) % 360;
       }
-      // --- pitch (look up/down) --- calibrate the FIRST reading as neutral, then
-      // measure tilt relative to that rest pose. Clamp so you can't flip over.
+      // --- pitch (look up/down) --- beta is gravity-referenced: ~90 = phone held
+      // upright (camera at the horizon). Using (beta - 90) locks the virtual
+      // floor to the REAL floor, so looking up/down shows Anymon from the correct
+      // angle. Clamp so you can't flip the world over.
       if (typeof e.beta === "number" && !Number.isNaN(e.beta)) {
-        if (restBetaRef.current == null) restBetaRef.current = e.beta;
-        pitchRef.current = degToRad(clamp(e.beta - restBetaRef.current, -55, 55));
+        pitchRef.current = degToRad(clamp(e.beta - 90, -55, 55));
       }
       if (!activeRef.current) {
         activeRef.current = true;
@@ -545,6 +579,7 @@ export default function ArScene({
   return (
     <div className={`pointer-events-none absolute inset-0 ${className}`}>
       <Canvas
+        shadows
         gl={{ alpha: true, antialias: true }}
         camera={{ position: [0, 1.5, 0], fov: 65, near: 0.1, far: 120 }}
         dpr={[1, 2]}
@@ -553,18 +588,30 @@ export default function ArScene({
         <CameraRig pitchRef={pitchRef} />
         <ambientLight intensity={0.85} />
         <hemisphereLight intensity={0.5} groundColor="#bfe9ff" />
-        <directionalLight position={[4, 8, 5]} intensity={1.3} castShadow />
+        <directionalLight
+          position={[4, 8, 5]}
+          intensity={1.3}
+          castShadow
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
+          shadow-camera-near={0.5}
+          shadow-camera-far={40}
+          shadow-camera-left={-16}
+          shadow-camera-right={16}
+          shadow-camera-top={16}
+          shadow-camera-bottom={-16}
+          shadow-bias={-0.0004}
+        />
         <directionalLight position={[-4, 3, -3]} intensity={0.4} color="#8BE01E" />
 
+        {/* Transparent ground that only darkens where Anymon cast a shadow, so a
+            soft contact shadow lands on the real floor over the camera feed. */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+          <planeGeometry args={[80, 80]} />
+          <shadowMaterial transparent opacity={0.32} color="#04222a" />
+        </mesh>
+
         <HeadingGroup headingRef={headingRef} fallbackHeading={heading}>
-          <ContactShadows
-            position={[0, 0.01, 0]}
-            scale={40}
-            blur={2.4}
-            far={8}
-            opacity={0.45}
-            color="#04222a"
-          />
           {wild.map((w, i) => (
             <WildEntity
               key={w.id}

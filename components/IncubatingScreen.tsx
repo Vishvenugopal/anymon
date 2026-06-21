@@ -15,7 +15,9 @@ export default function IncubatingScreen({
   const [progress, setProgress] = useState(5);
   const [glbUrl, setGlbUrl] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const done = ready || failed;
 
   useEffect(() => {
     let alive = true;
@@ -28,6 +30,12 @@ export default function IncubatingScreen({
           setGlbUrl(s.glbUrl);
           setProgress(100);
           setReady(true);
+          if (timer.current) clearInterval(timer.current);
+        } else if (s.status === "failed" || s.done) {
+          // Terminal failure (or watchdog timeout): stop polling so we never
+          // hang on "incubating…". The 2D sprite anymon is still saved + usable.
+          setFailed(true);
+          setProgress(100);
           if (timer.current) clearInterval(timer.current);
         }
       } catch {
@@ -63,7 +71,7 @@ export default function IncubatingScreen({
       />
 
       <div className="relative z-10 mb-2 font-sans text-sm font-bold tracking-widest text-anymon-lime">
-        {ready ? "hatched!" : "incubating..."}
+        {done ? "hatched!" : "incubating..."}
       </div>
       <div className="relative z-10 mb-6 font-retro text-4xl tracking-tight">
         {capture.name}
@@ -102,14 +110,18 @@ export default function IncubatingScreen({
         />
       </div>
       <div className="relative z-10 mt-2 text-xs text-anymon-ink/60">
-        {ready ? "your 3d anymon is ready" : "sculpting a 3d model (1-2 min)"}
+        {ready
+          ? "your 3d anymon is ready"
+          : failed
+            ? "3d model unavailable — your 2d anymon is saved"
+            : "sculpting a 3d model (1-2 min)"}
       </div>
 
       <button
         onClick={onClose}
         className="gummy-btn relative z-10 mt-8 border-2 border-anymon-edgelime bg-anymon-lime px-8 py-3 text-anymon-ink shadow-gummy-lime"
       >
-        {ready ? "add to deck" : "keep scanning"}
+        {done ? "add to deck" : "keep scanning"}
       </button>
     </motion.div>
   );
