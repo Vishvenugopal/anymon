@@ -10,20 +10,13 @@ import {
   type ReactNode,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import {
-  Billboard,
-  Html,
-  useAnimations,
-  useFBX,
-  useGLTF,
-  useTexture,
-} from "@react-three/drei";
+import { Billboard, Html, useGLTF, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 import { NEARBY_RADIUS_M } from "@/lib/types";
 
 // A simulated ground-plane AR scene: a transparent r3f canvas layered over the
 // live camera feed. Wild Anymon render as their real GLB (sprite-plane while
-// still incubating); nearby trainers render as the shared Player.fbx avatar.
+// still incubating); nearby trainers render as a simple low-poly primitive avatar.
 // The whole scene group is rotated by the device compass heading so blips sit
 // in the correct real-world direction as you turn.
 
@@ -108,6 +101,38 @@ function depthCues(distM: number) {
   };
 }
 
+// Soft "blob" ground shadow: a radial-gradient sprite laid flat on the floor.
+// Used instead of real shadow mapping (which crashes mobile GPUs with the skinned
+// trainer FBX). The texture is built lazily in the browser and shared.
+let blobTex: THREE.Texture | null = null;
+function getBlobTexture(): THREE.Texture {
+  if (blobTex) return blobTex;
+  const size = 128;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  if (ctx) {
+    const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    g.addColorStop(0, "rgba(4,34,42,0.5)");
+    g.addColorStop(0.6, "rgba(4,34,42,0.2)");
+    g.addColorStop(1, "rgba(4,34,42,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  }
+  blobTex = new THREE.CanvasTexture(c);
+  return blobTex;
+}
+
+function BlobShadow({ y, radius }: { y: number; radius: number }) {
+  const tex = useMemo(() => getBlobTexture(), []);
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]}>
+      <planeGeometry args={[radius * 2, radius * 2]} />
+      <meshBasicMaterial map={tex} transparent depthWrite={false} />
+    </mesh>
+  );
+}
+
 // ---- a roaming wild Anymon rendered from its GLB ----
 function WildModel({
   glbUrl,
@@ -130,7 +155,6 @@ function WildModel({
         mesh.material = Array.isArray(mesh.material)
           ? mesh.material.map((m) => m.clone())
           : mesh.material.clone();
-        mesh.castShadow = true; // cast onto the ground shadow-catcher
       }
     });
     return c;
@@ -285,6 +309,7 @@ function WildEntity({
   return (
     <group position={[x, 0, z]}>
       <group ref={wanderRef}>
+        <BlobShadow y={FLOOR_Y} radius={Math.max(0.5, height * 0.55)} />
         <Suspense fallback={sprite}>
           {wild.ready && wild.glbUrl ? (
             <ModelErrorBoundary fallback={sprite}>
@@ -335,52 +360,63 @@ function WildEntity({
   );
 }
 
-// ---- a nearby trainer rendered as the shared Player.fbx ----
+// ---- a nearby trainer, drawn as a simple low-poly avatar ----
+// Built entirely from primitives ON PURPOSE: the Sketchfab Player.fbx carried a
+// skinned mesh + materials that crashed mobile WebGL and white-screened the whole
+// scene whenever another player appeared. Primitives load instantly and can never
+// break the GL context. ~2.4 units tall so trainers clearly tower over Anymon.
 function TrainerModel() {
-  const fbx = useFBX("/models/Player.fbx");
-  // NOTE: do NOT enable castShadow here. The trainer is a SKINNED (animated)
-  // mesh, and rendering a skinned mesh into the shadow map compiles a skinning
-  // depth shader that crashes the WebGL context on some mobile GPUs — which made
-  // EVERY model in the scene render white the moment another player appeared.
-  const cloned = useMemo(() => fbx.clone(true), [fbx]);
   const ref = useRef<THREE.Group>(null);
-  const { actions, names } = useAnimations(cloned.animations ?? [], ref);
-  // Trainers are human avatars, not Anymon — render them clearly TALLER than the
-  // wild creatures (max ~1.8) so players never confuse the two. Lift = height/2
-  // keeps the model's feet on the floor.
-  const TRAINER_HEIGHT = 2.6;
-  const { scale, center } = useAutoFit(cloned, TRAINER_HEIGHT);
-
-  useEffect(() => {
-    const first = names[0];
-    if (first && actions[first]) actions[first]?.reset().fadeIn(0.3).play();
-    return () => {
-      if (first && actions[first]) actions[first]?.fadeOut(0.2);
-    };
-  }, [actions, names]);
-
+  useFrame((state) => {
+    if (ref.current) {
+      ref.current.position.y =
+        FLOOR_Y + Math.sin(state.clock.elapsedTime * 1.6) * 0.05;
+    }
+  });
+  const skin = "#F2C49B";
+  const outfit = "#3FB0D6";
+  const pants = "#2C3E50";
+  const cap = "#FF3B53";
   return (
-    <group ref={ref}>
-      <group
-        scale={scale}
-        position={[
-          -center.x * scale,
-          -center.y * scale + TRAINER_HEIGHT / 2 + FLOOR_Y, // feet on the floor
-          -center.z * scale,
-        ]}
-      >
-        <primitive object={cloned} />
-      </group>
+    <group ref={ref} position={[0, FLOOR_Y, 0]}>
+      {/* legs */}
+      <mesh position={[-0.2, 0.45, 0]}>
+        <capsuleGeometry args={[0.15, 0.55, 4, 8]} />
+        <meshStandardMaterial color={pants} />
+      </mesh>
+      <mesh position={[0.2, 0.45, 0]}>
+        <capsuleGeometry args={[0.15, 0.55, 4, 8]} />
+        <meshStandardMaterial color={pants} />
+      </mesh>
+      {/* torso */}
+      <mesh position={[0, 1.3, 0]}>
+        <capsuleGeometry args={[0.4, 0.75, 6, 12]} />
+        <meshStandardMaterial color={outfit} />
+      </mesh>
+      {/* arms */}
+      <mesh position={[-0.48, 1.35, 0]} rotation={[0, 0, 0.28]}>
+        <capsuleGeometry args={[0.12, 0.6, 4, 8]} />
+        <meshStandardMaterial color={outfit} />
+      </mesh>
+      <mesh position={[0.48, 1.35, 0]} rotation={[0, 0, -0.28]}>
+        <capsuleGeometry args={[0.12, 0.6, 4, 8]} />
+        <meshStandardMaterial color={outfit} />
+      </mesh>
+      {/* head */}
+      <mesh position={[0, 2.05, 0]}>
+        <sphereGeometry args={[0.32, 16, 16]} />
+        <meshStandardMaterial color={skin} />
+      </mesh>
+      {/* cap + brim */}
+      <mesh position={[0, 2.32, 0]}>
+        <cylinderGeometry args={[0.33, 0.33, 0.16, 16]} />
+        <meshStandardMaterial color={cap} />
+      </mesh>
+      <mesh position={[0, 2.26, 0.3]}>
+        <boxGeometry args={[0.48, 0.06, 0.3]} />
+        <meshStandardMaterial color={cap} />
+      </mesh>
     </group>
-  );
-}
-
-function TrainerFallback() {
-  return (
-    <mesh position={[0, FLOOR_Y + 1.3, 0]}>
-      <capsuleGeometry args={[0.5, 1.6, 4, 8]} />
-      <meshStandardMaterial color="#3FB0D6" />
-    </mesh>
   );
 }
 
@@ -400,11 +436,8 @@ function TrainerEntity({
   const [x, z] = placeXZ(bearing, trainer.distM);
   return (
     <group position={[x, 0, z]}>
-      <Suspense fallback={<TrainerFallback />}>
-        <ModelErrorBoundary fallback={<TrainerFallback />}>
-          <TrainerModel />
-        </ModelErrorBoundary>
-      </Suspense>
+      <BlobShadow y={FLOOR_Y} radius={0.95} />
+      <TrainerModel />
       {showOverlays && (
         <Html
           position={[0, FLOOR_Y + 2.9, 0]}
@@ -589,7 +622,6 @@ export default function ArScene({
   return (
     <div className={`pointer-events-none absolute inset-0 ${className}`}>
       <Canvas
-        shadows
         gl={{ alpha: true, antialias: true }}
         camera={{ position: [0, 1.5, 0], fov: 65, near: 0.1, far: 120 }}
         dpr={[1, 2]}
@@ -598,28 +630,12 @@ export default function ArScene({
         <CameraRig pitchRef={pitchRef} />
         <ambientLight intensity={0.85} />
         <hemisphereLight intensity={0.5} groundColor="#bfe9ff" />
-        <directionalLight
-          position={[4, 8, 5]}
-          intensity={1.3}
-          castShadow
-          shadow-mapSize-width={1024}
-          shadow-mapSize-height={1024}
-          shadow-camera-near={0.5}
-          shadow-camera-far={40}
-          shadow-camera-left={-16}
-          shadow-camera-right={16}
-          shadow-camera-top={16}
-          shadow-camera-bottom={-16}
-          shadow-bias={-0.0004}
-        />
+        {/* No shadow MAPPING: with shadows enabled, the skinned (animated) trainer
+            FBX compiles shadow+skinning shaders that crash mobile GPUs and white
+            out the whole scene. We fake grounding with soft blob shadows instead
+            (see BlobShadow), so no real shadow shaders are ever compiled. */}
+        <directionalLight position={[4, 8, 5]} intensity={1.3} />
         <directionalLight position={[-4, 3, -3]} intensity={0.4} color="#8BE01E" />
-
-        {/* Transparent ground that only darkens where Anymon cast a shadow, so a
-            soft contact shadow lands on the real floor over the camera feed. */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
-          <planeGeometry args={[80, 80]} />
-          <shadowMaterial transparent opacity={0.32} color="#04222a" />
-        </mesh>
 
         <HeadingGroup headingRef={headingRef} fallbackHeading={heading}>
           {wild.map((w, i) => (
@@ -647,5 +663,3 @@ export default function ArScene({
     </div>
   );
 }
-
-useFBX.preload?.("/models/Player.fbx");

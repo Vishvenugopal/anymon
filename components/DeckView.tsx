@@ -534,7 +534,7 @@ function AnymonCard({
           {/* Roaming "won N battles" notice */}
           {a.state === "wild" && a.pendingWins > 0 && (
             <div className="win-notice mt-1.5">
-              ⚔ won {a.pendingWins} {a.pendingWins === 1 ? "battle" : "battles"}
+              won {a.pendingWins} {a.pendingWins === 1 ? "battle" : "battles"}
             </div>
           )}
 

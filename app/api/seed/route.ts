@@ -5,19 +5,19 @@ import { NEARBY_RADIUS_M, rarityMaxHp, type Anymon } from "@/lib/types";
 export const runtime = "nodejs";
 
 // Bump when the seed set changes so old placeholders are cleaned up + replaced.
-const SEED_VERSION = "v2";
+const SEED_VERSION = "v3";
 
 // Real pre-generated starter Anymon: each `asset` has a matching sprite + 3D
 // model under /public/seeds (built FROM that object via Gemini + Meshy, see
 // scripts/gen-seeds.mjs), so name ↔ object ↔ model all agree and they read as
 // genuine Anymon instead of random sample models with mismatched names.
 // Commonness-based rarity stays harsh (everyday objects = 1 star).
+// Clustered in a frontal arc (bearings within ~70°) + staggered distance so they
+// spawn together in front of the player instead of surrounding them.
 const SEEDS = [
-  { asset: "book", object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA", rarity: 1 },
-  { asset: "mug", object: "mug", name: "Muglet", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 1 },
-  { asset: "umbrella", object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK", rarity: 2 },
-  { asset: "lamp", object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France", rarity: 1 },
-  { asset: "telescope", object: "telescope", name: "Scopestar", owner: "orbit-1a2b", city: "Reykjavik", country: "Iceland", rarity: 5 },
+  { asset: "book", object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA", rarity: 1, bearing: -30, dist: 24 },
+  { asset: "mug", object: "mug", name: "Muglet", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 1, bearing: 8, dist: 33 },
+  { asset: "telescope", object: "telescope", name: "Scopestar", owner: "orbit-1a2b", city: "Reykjavik", country: "Iceland", rarity: 5, bearing: 36, dist: 26 },
 ];
 
 function offset(lat: number, lng: number, meters: number, bearingDeg: number) {
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     let seeded = 0;
     for (let i = 0; i < SEEDS.length; i++) {
       const s = SEEDS[i];
-      const pos = offset(lat, lng, 25 + i * 15, i * 90);
+      const pos = offset(lat, lng, s.dist, s.bearing);
       const maxHp = rarityMaxHp(s.rarity);
       const a: Anymon = {
         id: crypto.randomUUID(),
