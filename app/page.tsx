@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import ScannerView from "@/components/ScannerView";
 import DeckView from "@/components/DeckView";
-import MapView from "@/components/MapView";
 import BottomNav, { type Tab } from "@/components/BottomNav";
 import SignIn from "@/components/SignIn";
 import UsernameSetup from "@/components/UsernameSetup";
@@ -116,13 +115,16 @@ export default function Home() {
     <main className="flex min-h-[100dvh] w-full justify-center bg-anymon-ink">
       <div className="relative h-[100dvh] w-full max-w-md overflow-hidden bg-anymon-cloud shadow-2xl">
         {tab === "scanner" && (
-          <ScannerView pos={pos} place={place} onCaptured={refresh} />
+          <ScannerView
+            pos={pos}
+            place={place}
+            nearby={nearby}
+            deck={anymons}
+            onRefresh={refresh}
+          />
         )}
         {tab === "deck" && player && (
           <DeckView anymons={anymons} pos={pos} player={player} onChanged={refresh} />
-        )}
-        {tab === "map" && (
-          <MapView nearby={nearby} deck={anymons} pos={pos} onRefresh={refresh} />
         )}
 
         {!booted && (

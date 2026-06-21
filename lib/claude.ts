@@ -1,17 +1,58 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   BATTLE_SYSTEM_PROMPT,
+  MOVES_SYSTEM_PROMPT,
   OBJECT_ID_PROMPT,
   battleUserPrompt,
+  movesUserPrompt,
 } from "./prompts";
 import { compressContext } from "./tokencompany";
-
-const MODEL = process.env.CLAUDE_MODEL || "claude-3-5-sonnet-latest";
+import type { Move, MoveKind } from "./types";
 
 function client(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY missing");
   return new Anthropic({ apiKey });
+}
+
+// Model aliases like "claude-3-5-sonnet-latest" can 404 once retired, which
+// silently breaks captures + battles. Resolve a real, available model id from
+// the account once and cache it. Prefer an explicit CLAUDE_MODEL, then the best
+// Sonnet, then Haiku, then whatever exists.
+let cachedModel: string | null = null;
+
+// The installed SDK has no Models resource, so hit the REST endpoint directly.
+async function listModelIds(): Promise<string[]> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return [];
+  const res = await fetch("https://api.anthropic.com/v1/models?limit=100", {
+    headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+  });
+  if (!res.ok) throw new Error(`models ${res.status}`);
+  const data = (await res.json()) as { data?: { id: string }[] };
+  return (data.data ?? []).map((m) => m.id);
+}
+
+async function pickModel(): Promise<string> {
+  if (cachedModel) return cachedModel;
+  const env = process.env.CLAUDE_MODEL?.trim();
+  try {
+    const ids = await listModelIds();
+    if (ids.length) {
+      cachedModel =
+        (env && ids.includes(env) && env) ||
+        ids.find((i) => /sonnet/i.test(i)) ||
+        ids.find((i) => /haiku/i.test(i)) ||
+        ids[0];
+      console.log("[claude] using model:", cachedModel, "(of", ids.length, "available)");
+      return cachedModel!;
+    }
+  } catch (e) {
+    console.warn("[claude] model discovery failed:", (e as Error).message);
+  }
+  cachedModel = env || "claude-3-5-sonnet-20241022";
+  console.log("[claude] using fallback model:", cachedModel);
+  return cachedModel;
 }
 
 function splitDataUri(input: string): { mimeType: string; data: string } {
@@ -25,8 +66,9 @@ export async function identifyObject(
   photoBase64OrDataUri: string,
 ): Promise<string> {
   const { mimeType, data } = splitDataUri(photoBase64OrDataUri);
-  const msg = await client().messages.create({
-    model: MODEL,
+  const c = client();
+  const msg = await c.messages.create({
+    model: await pickModel(),
     max_tokens: 16,
     messages: [
       {
@@ -70,18 +112,85 @@ export async function judgeBattle(args: {
   bObject: string;
   locationHint?: string;
 }): Promise<RawBattle> {
-  const userPrompt = await compressContext(battleUserPrompt(args));
-  const msg = await client().messages.create({
-    model: MODEL,
-    max_tokens: 400,
-    system: BATTLE_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: userPrompt }],
+  try {
+    const userPrompt = await compressContext(battleUserPrompt(args));
+    const c = client();
+    const msg = await c.messages.create({
+      model: await pickModel(),
+      max_tokens: 400,
+      system: BATTLE_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userPrompt }],
+    });
+    const text = msg.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("")
+      .trim();
+    return parseBattle(text, args);
+  } catch (e) {
+    // Never hard-fail a battle on an API hiccup — use the heuristic result.
+    console.warn("[claude] judgeBattle fell back to heuristic:", (e as Error).message);
+    return parseBattle("", args);
+  }
+}
+
+// ---- Move generation (turn-based battles) ----
+
+const clampInt = (v: unknown, lo: number, hi: number, dflt: number): number => {
+  const n = Math.round(Number(v));
+  return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt;
+};
+
+function sanitizeMoves(raw: unknown, object: string): Move[] {
+  const arr = Array.isArray(raw) ? raw : [];
+  const kinds: MoveKind[] = ["physical", "special", "status"];
+  const moves: Move[] = arr.slice(0, 4).map((m) => {
+    const o = (m ?? {}) as Record<string, unknown>;
+    const kind = kinds.includes(o.kind as MoveKind)
+      ? (o.kind as MoveKind)
+      : "physical";
+    return {
+      name: String(o.name ?? "Tackle").slice(0, 18),
+      power: clampInt(o.power, 0, 40, kind === "status" ? 0 : 20),
+      accuracy: clampInt(o.accuracy, 70, 100, 95),
+      kind,
+      emoji: String(o.emoji ?? "✨").slice(0, 4),
+      blurb: String(o.blurb ?? "").slice(0, 120),
+    };
   });
-  const text = msg.content
-    .map((c) => (c.type === "text" ? c.text : ""))
-    .join("")
-    .trim();
-  return parseBattle(text, args);
+  while (moves.length < 4) moves.push(fallbackMoves(object)[moves.length]);
+  return moves;
+}
+
+/** Deterministic, no-API moveset so battles always work. */
+export function fallbackMoves(object: string): Move[] {
+  const o = object || "anymon";
+  return [
+    { name: "Tackle", power: 18, accuracy: 100, kind: "physical", emoji: "💥", blurb: `The ${o} throws its full mass into a hit (momentum = mass × velocity).` },
+    { name: "Slam", power: 30, accuracy: 80, kind: "physical", emoji: "🔨", blurb: `A heavy, risky strike — more force, harder to aim.` },
+    { name: "Quirk Beam", power: 25, accuracy: 90, kind: "special", emoji: "🌈", blurb: `Channels the ${o}'s signature property into energy.` },
+    { name: "Brace", power: 0, accuracy: 100, kind: "status", emoji: "🛡️", blurb: `Stiffens up to absorb the next blow (rigidity resists deformation).` },
+  ];
+}
+
+export async function generateMoves(object: string): Promise<Move[]> {
+  try {
+    const c = client();
+    const msg = await c.messages.create({
+      model: await pickModel(),
+      max_tokens: 500,
+      system: MOVES_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: movesUserPrompt(object) }],
+    });
+    const text = msg.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("")
+      .trim();
+    const jsonStr = text.slice(text.indexOf("["), text.lastIndexOf("]") + 1);
+    return sanitizeMoves(JSON.parse(jsonStr), object);
+  } catch (e) {
+    console.warn("[claude] generateMoves fell back:", (e as Error).message);
+    return fallbackMoves(object);
+  }
 }
 
 function parseBattle(

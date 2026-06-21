@@ -1,6 +1,6 @@
 "use client";
 
-import type { Anymon, BattleOutcome, GeoHit } from "./types";
+import type { Anymon, BattleOutcome, GeoHit, Move } from "./types";
 
 // The signed-in player, derived from the server session (not localStorage).
 export interface Player {
@@ -140,10 +140,34 @@ export async function apiRelease(
   return res.json();
 }
 
-export async function apiBattle(body: {
+// ---- Turn-based battle ----
+export interface Combatant {
+  id: string;
+  name: string;
+  object: string;
+  spriteDataUri: string;
+  glbUrl: string | null;
+  maxHp: number;
+  moves: Move[];
+}
+
+export async function apiBattleStart(body: {
   attackerId: string;
   defenderId: string;
-  pos: Position;
+}): Promise<{ attacker: Combatant; defender: Combatant }> {
+  const res = await fetch("/api/battle/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || "could not start battle");
+  return res.json();
+}
+
+export async function apiBattleResolve(body: {
+  attackerId: string;
+  defenderId: string;
+  winnerId: string;
 }): Promise<BattleOutcome> {
   const res = await fetch("/api/battle", {
     method: "POST",
@@ -152,6 +176,16 @@ export async function apiBattle(body: {
   });
   if (!res.ok) throw new Error((await res.json()).error || "battle failed");
   return res.json();
+}
+
+export function apiBattleCancel(defenderId: string): void {
+  // fire-and-forget; releasing the lock is best-effort
+  fetch("/api/battle/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ defenderId }),
+    keepalive: true,
+  }).catch(() => {});
 }
 
 export async function apiSeed(pos: Position): Promise<void> {
@@ -177,4 +211,4 @@ export async function apiAutoBattle(
   }
 }
 
-export type { Anymon, BattleOutcome, GeoHit };
+export type { Anymon, BattleOutcome, GeoHit, Move };

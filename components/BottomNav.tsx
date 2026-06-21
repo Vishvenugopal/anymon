@@ -1,11 +1,10 @@
 "use client";
 
-export type Tab = "scanner" | "deck" | "map";
+export type Tab = "scanner" | "deck";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "deck", label: "deck", icon: "🎒" },
   { id: "scanner", label: "scan", icon: "📷" },
-  { id: "map", label: "radar", icon: "📡" },
+  { id: "deck", label: "deck", icon: "🎒" },
 ];
 
 export default function BottomNav({
@@ -39,7 +38,7 @@ export default function BottomNav({
             <span className="font-retro text-[10px] tracking-wider">
               {t.label}
             </span>
-            {t.id === "map" && nearbyCount > 0 && (
+            {t.id === "scanner" && nearbyCount > 0 && (
               <span className="absolute right-3 top-0 rounded-full bg-anymon-ocean px-1.5 text-[10px] font-bold text-white">
                 {nearbyCount}
               </span>

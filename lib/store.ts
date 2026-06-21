@@ -238,16 +238,41 @@ export function getStore(): Store {
     const IORedis = require("ioredis") as typeof import("ioredis").default;
     const g = globalThis as unknown as { __anymonRedis?: Redis };
     if (!g.__anymonRedis) {
+      // If auth is rejected we must NOT keep reconnecting — a retry storm against
+      // a bad password is exactly what trips Redis Cloud's brute-force lockout.
+      const isAuthError = (msg: string) =>
+        /WRONGPASS|NOAUTH|NOPERM|invalid username-password/i.test(msg);
+
       const client = new IORedis(url, {
         maxRetriesPerRequest: 3,
+        connectTimeout: 8000,
         keepAlive: 10000, // TCP keepalive to reduce idle disconnects
-        retryStrategy: (times) => Math.min(times * 200, 2000),
+        // Give up reconnecting after ~10 network attempts; null = stop.
+        retryStrategy: (times) => (times > 10 ? null : Math.min(times * 200, 2000)),
+        // Don't auto-reconnect on auth errors at all.
+        reconnectOnError: (err) => !isAuthError(err.message),
       });
-      // Handle 'error' so transient drops (ECONNRESET on idle) don't surface as
-      // "Unhandled error event"; ioredis reconnects automatically.
-      client.on("error", (e) =>
-        console.warn("[redis] connection error (auto-reconnecting):", e.message),
-      );
+
+      client.on("error", (e) => {
+        if (isAuthError(e.message)) {
+          console.error(
+            "[redis] AUTH rejected — disabling Redis for this run to avoid a " +
+              "lockout. Fix REDIS_URL (regenerate the password) and restart. " +
+              "Falling back to in-memory store.",
+          );
+          // Kill the client so nothing keeps hammering the server.
+          try {
+            client.disconnect();
+          } catch {}
+          // Swap the live store over to in-memory so requests keep working.
+          const gm = globalThis as unknown as { __anymonMem?: MemoryStore };
+          if (!gm.__anymonMem) gm.__anymonMem = new MemoryStore();
+          store = gm.__anymonMem;
+        } else {
+          // Benign transient drop (e.g. ECONNRESET on idle) — ioredis reconnects.
+          console.warn("[redis] connection error (auto-reconnecting):", e.message);
+        }
+      });
       g.__anymonRedis = client;
     }
     store = new RedisStore(g.__anymonRedis);

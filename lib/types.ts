@@ -16,6 +16,21 @@ export const MAX_WILD = 5;
 export const NEARBY_RADIUS_M = 100;
 export const AUTO_BATTLE_CHANCE = 0.5;
 
+// Max HP every Anymon starts a battle with.
+export const BASE_HP = 100;
+
+export type MoveKind = "physical" | "special" | "status";
+
+// A single battle move, uniquely generated from the Anymon's real-world object.
+export interface Move {
+  name: string;
+  power: number; // 0-40 base damage (0 = status move)
+  accuracy: number; // 70-100 (% chance to land)
+  kind: MoveKind;
+  emoji: string;
+  blurb: string; // short real-world science tie-in (educational)
+}
+
 export interface Anymon {
   id: string;
   object: string; // one-word label from Claude Vision (e.g. "bottle")
@@ -34,6 +49,7 @@ export interface Anymon {
   lng: number | null;
   createdAt: number;
   deployedAt: number | null; // when released into the wild (for passive farming)
+  moves?: Move[]; // generated lazily from `object` on first battle, then cached
 }
 
 // Coins a deployed wild Anymon earns per minute.

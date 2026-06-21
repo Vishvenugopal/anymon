@@ -37,3 +37,19 @@ export function battleUserPrompt(args: {
   const loc = args.locationHint ? ` Location context: ${args.locationHint}.` : "";
   return `Anymon A is based on a ${args.aObject}. Anymon B is based on a ${args.bObject}.${loc} Who wins and why?`;
 }
+
+// ---- Move generation (turn-based, Pokemon-style) ----
+export const MOVES_SYSTEM_PROMPT = [
+  "You design a moveset for a creature in Anymon, an educational monster-battler.",
+  "The creature is based on a REAL-WORLD object. Invent exactly 4 battle moves that come",
+  "from that object's true physical properties, materials, uses, or science.",
+  "Make them fun and punchy like Pokemon moves, but each must teach something REAL.",
+  "Vary the moves: include strong/risky ones (high power, lower accuracy), reliable ones,",
+  "and at least one 'status' move (buff/defense/heal-ish, power can be 0).",
+  "Respond with ONLY a JSON array (no markdown fences) of 4 objects, each EXACTLY:",
+  '{"name":"<<=18 chars>","power":<integer 0-40>,"accuracy":<integer 70-100>,"kind":"physical"|"special"|"status","emoji":"<1 emoji>","blurb":"<<=14 word real-world science reason>"}',
+].join(" ");
+
+export function movesUserPrompt(object: string): string {
+  return `Create the 4-move moveset for an Anymon based on a ${object}.`;
+}

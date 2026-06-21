@@ -1,4 +1,5 @@
 import { getStore } from "./store";
+import { createImageTo3D, getImageTo3D } from "./meshy";
 
 // Image -> 3D via the public Hugging Face Space "microsoft/TRELLIS.2".
 // Free GPU (ZeroGPU) — needs an HF token for usable quota. The Space exposes a
@@ -50,25 +51,74 @@ export async function generateGlbViaSpace(spriteDataUri: string): Promise<string
   return url;
 }
 
+/** Meshy fallback: create an image-to-3D task and poll until the GLB is ready. */
+async function generateGlbViaMeshy(spriteDataUri: string): Promise<string> {
+  const taskId = await createImageTo3D(spriteDataUri);
+  const deadline = Date.now() + 4 * 60 * 1000; // up to 4 min
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 5000));
+    const s = await getImageTo3D(taskId);
+    if (s.status === "SUCCEEDED" && s.glbUrl) return s.glbUrl;
+    if (s.status === "FAILED" || s.status === "CANCELED")
+      throw new Error("Meshy task failed");
+  }
+  throw new Error("Meshy timed out");
+}
+
 /**
  * Fire-and-forget background job: generates the GLB and writes it back onto the
  * Anymon when done. Keeps the instant-2D UX (capture returns immediately; the
  * 3D model fills in on a later /capture/status poll). Works on a long-lived
  * Node server (next dev / self-host); not on per-request serverless platforms.
+ *
+ * Strategy: try the free HF Space (with retries); if it can't deliver, fall back
+ * to Meshy when MESHY_API_KEY is set; otherwise mark failed (sample model shown).
  */
 export async function startHfGeneration(
   anymonId: string,
   spriteDataUri: string,
 ): Promise<void> {
   const store = getStore();
-  try {
-    const url = await generateGlbViaSpace(spriteDataUri);
-    // Serve via our same-origin proxy to dodge CORS in the 3D viewer.
-    const proxied = `/api/glb?u=${encodeURIComponent(url)}`;
-    await store.updateAnymon(anymonId, { glbUrl: proxied, status: "ready" });
-  } catch (e) {
-    console.error("hfspace generation failed", e);
-    // Mark failed; resolveGlb hands back a sample model so the demo continues.
-    await store.updateAnymon(anymonId, { status: "failed" });
+  // The shared public TRELLIS.2 Space (ZeroGPU) intermittently errors when it's
+  // out of quota or restarting, so retry a couple of times before giving up.
+  const attempts = 3;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      const url = await generateGlbViaSpace(spriteDataUri);
+      const proxied = `/api/glb?u=${encodeURIComponent(url)}`;
+      await store.updateAnymon(anymonId, { glbUrl: proxied, status: "ready" });
+      console.log(`[hfspace] ${anymonId} ready (attempt ${i})`);
+      return;
+    } catch (e) {
+      const detail =
+        e instanceof Error
+          ? e.message
+          : (() => {
+              try {
+                return JSON.stringify(e);
+              } catch {
+                return String(e);
+              }
+            })();
+      console.error(`[hfspace] attempt ${i}/${attempts} failed:`, detail);
+      if (i < attempts) await new Promise((r) => setTimeout(r, 4000 * i));
+    }
   }
+
+  // HF Space gave up — fall back to Meshy if a key is configured.
+  if (process.env.MESHY_API_KEY) {
+    try {
+      console.log(`[hfspace] falling back to Meshy for ${anymonId}`);
+      const url = await generateGlbViaMeshy(spriteDataUri);
+      const proxied = `/api/glb?u=${encodeURIComponent(url)}`;
+      await store.updateAnymon(anymonId, { glbUrl: proxied, status: "ready" });
+      console.log(`[hfspace] ${anymonId} ready via Meshy fallback`);
+      return;
+    } catch (e) {
+      console.error("[meshy fallback] failed:", (e as Error).message);
+    }
+  }
+
+  // Mark failed; resolveGlb hands back a sample model so the demo continues.
+  await store.updateAnymon(anymonId, { status: "failed" });
 }
