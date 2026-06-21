@@ -123,7 +123,8 @@ export default function ScannerView({
     [attackers],
   );
 
-  const wild = useMemo(() => nearby.filter((a) => !a.mine), [nearby]);
+  // Everything nearby is shown in AR: other trainers' roamers (capturable) AND
+  // the viewer's own deployed Anymon (shown, but not capturable).
 
   // Open the PvP screen automatically when an incoming invite shows up.
   useEffect(() => {
@@ -194,7 +195,7 @@ export default function ScannerView({
 
   // ---- map wild Anymon + trainers to AR placements ----
   const arWild = useMemo<ArWild[]>(() => {
-    return wild.map((a) => {
+    return nearby.map((a) => {
       const hasGeo = pos && a.lat != null && a.lng != null;
       const bearing = hasGeo
         ? bearingDeg(pos, { lat: a.lat as number, lng: a.lng as number })
@@ -208,9 +209,10 @@ export default function ScannerView({
         ready: a.status === "ready",
         distM: a.distM,
         bearing,
+        mine: a.mine,
       };
     });
-  }, [wild, pos]);
+  }, [nearby, pos]);
 
   const arTrainers = useMemo<ArTrainer[]>(() => {
     return trainers.map((t) => ({
@@ -286,7 +288,7 @@ export default function ScannerView({
       {/* corner radar */}
       <MiniRadar blips={radarBlips} heading={heading} />
 
-      {camReady && wild.length === 0 && trainers.length === 0 && (
+      {camReady && nearby.length === 0 && trainers.length === 0 && (
         <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-gummy bg-black/45 px-4 py-2 text-center text-xs text-white/80">
           no wild anymon or trainers nearby — scan an object or move around
         </div>

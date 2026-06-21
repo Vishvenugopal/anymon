@@ -113,10 +113,10 @@ export default function IncubatingScreen({
       </div>
       <div className="relative z-10 mt-2 text-xs text-anymon-ink/60">
         {ready
-          ? "your 3d anymon is ready"
+          ? "your anymon is ready"
           : failed
             ? "3d model unavailable — your 2d anymon is saved"
-            : "sculpting a 3d model (1-2 min)"}
+            : `bringing ${capture.name} to life`}
       </div>
 
       <button

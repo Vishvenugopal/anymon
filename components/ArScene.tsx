@@ -36,6 +36,7 @@ export interface ArWild {
   ready: boolean;
   distM: number;
   bearing: number; // degrees from north (0 = N, clockwise)
+  mine: boolean; // true = the viewer's own deployed Anymon (no capture button)
 }
 
 export interface ArTrainer {
@@ -309,15 +310,22 @@ function WildEntity({
             zIndexRange={[19, 6]}
           >
             <div className="pointer-events-auto flex select-none flex-col items-center gap-1">
-              <button
-                onClick={() => onEngage(wild.id)}
-                disabled={busy}
-                className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-ink shadow-retro disabled:opacity-60"
-              >
-                {busy ? "…" : "capture"}
-              </button>
+              {wild.mine ? (
+                // Your own deployed Anymon: show it roaming, but no capture button.
+                <div className="rounded-gummy border-2 border-anymon-edgeocean bg-anymon-ocean/90 px-2 py-0.5 text-[10px] uppercase tracking-wide text-anymon-white shadow-retro">
+                  yours
+                </div>
+              ) : (
+                <button
+                  onClick={() => onEngage(wild.id)}
+                  disabled={busy}
+                  className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-ink shadow-retro disabled:opacity-60"
+                >
+                  {busy ? "…" : "capture"}
+                </button>
+              )}
               <div className="whitespace-nowrap rounded-gummy bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] text-anymon-white">
-                {wild.name} · {wild.distM}m
+                {wild.name}
               </div>
             </div>
           </Html>

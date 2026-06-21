@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
-import { placeholderSprite, sampleGlb } from "@/lib/placeholder";
 import { NEARBY_RADIUS_M, rarityMaxHp, type Anymon } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-// Commonness-based rarity: MOST wild seeds are common everyday objects (1 star),
-// with a couple of uncommon (2-3) and a single genuinely rare find (5 star) so
-// the radar shows a believable, harsh spread rather than inflated stars.
+// Bump when the seed set changes so old placeholders are cleaned up + replaced.
+const SEED_VERSION = "v2";
+
+// Real pre-generated starter Anymon: each `asset` has a matching sprite + 3D
+// model under /public/seeds (built FROM that object via Gemini + Meshy, see
+// scripts/gen-seeds.mjs), so name ↔ object ↔ model all agree and they read as
+// genuine Anymon instead of random sample models with mismatched names.
+// Commonness-based rarity stays harsh (everyday objects = 1 star).
 const SEEDS = [
-  { object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA", rarity: 1 },
-  { object: "cup", name: "Muglet", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 1 },
-  { object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK", rarity: 2 },
-  { object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France", rarity: 1 },
-  { object: "telescope", name: "Scopestar", owner: "orbit-1a2b", city: "Reykjavik", country: "Iceland", rarity: 5 },
+  { asset: "book", object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA", rarity: 1 },
+  { asset: "mug", object: "mug", name: "Muglet", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 1 },
+  { asset: "umbrella", object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK", rarity: 2 },
+  { asset: "lamp", object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France", rarity: 1 },
+  { asset: "telescope", object: "telescope", name: "Scopestar", owner: "orbit-1a2b", city: "Reykjavik", country: "Iceland", rarity: 5 },
 ];
 
 function offset(lat: number, lng: number, meters: number, bearingDeg: number) {
@@ -32,10 +36,28 @@ export async function POST(req: Request) {
     }
     const store = getStore();
 
-    // Don't keep stacking seeds: skip if the area already has wild Anymons.
-    const existing = await store.geoSearch(lng, lat, NEARBY_RADIUS_M);
-    if (existing.length >= 3) {
-      return NextResponse.json({ ok: true, seeded: 0 });
+    const hits = await store.geoSearch(lng, lat, NEARBY_RADIUS_M);
+    const nearby = (
+      await Promise.all(hits.map((h) => store.getAnymon(h.id)))
+    ).filter((a): a is Anymon => !!a);
+
+    // Remove OUTDATED seed placeholders (previous versions used random sample
+    // models with mismatched names) so they get replaced by the current set.
+    let removed = 0;
+    for (const a of nearby) {
+      if (a.ownerId.startsWith("seed:") && !a.ownerId.startsWith(`seed:${SEED_VERSION}:`)) {
+        await store.geoRemove(a.id);
+        await store.deleteAnymon(a.id);
+        removed++;
+      }
+    }
+
+    // Already seeded this version here? Don't stack.
+    const haveCurrent = nearby.some((a) =>
+      a.ownerId.startsWith(`seed:${SEED_VERSION}:`),
+    );
+    if (haveCurrent) {
+      return NextResponse.json({ ok: true, seeded: 0, removed });
     }
 
     let seeded = 0;
@@ -47,10 +69,10 @@ export async function POST(req: Request) {
         id: crypto.randomUUID(),
         object: s.object,
         name: s.name,
-        ownerId: `seed:${s.owner}`,
+        ownerId: `seed:${SEED_VERSION}:${s.owner}`,
         ownerName: s.owner,
-        spriteDataUri: placeholderSprite(s.object),
-        glbUrl: sampleGlb(i),
+        spriteDataUri: `/seeds/${s.asset}.png`,
+        glbUrl: `/seeds/${s.asset}.glb`,
         meshyTaskId: null,
         status: "ready",
         city: s.city,
@@ -73,7 +95,7 @@ export async function POST(req: Request) {
       seeded++;
     }
 
-    return NextResponse.json({ ok: true, seeded });
+    return NextResponse.json({ ok: true, seeded, removed });
   } catch (e) {
     console.error("seed error", e);
     return NextResponse.json({ ok: false, error: "seed failed" }, { status: 500 });

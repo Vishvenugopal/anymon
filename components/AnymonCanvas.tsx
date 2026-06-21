@@ -62,9 +62,10 @@ export default function AnymonCanvas({
 }: {
   glbUrl: string | null;
   spriteFallback?: string;
-  // A rendered still of the 3D model (Meshy thumbnail). Preferred over the 2D
-  // sprite as the resting/fallback image so an idle card still shows the actual
-  // 3D model — not the stylized sprite.
+  // Meshy's rendered still. NOT used as the resting image anymore: it's an opaque
+  // PNG with a BLACK background, which clashed with the white live 3D view. We
+  // fall back to the white-background 2D sprite instead and show the live 3D
+  // model whenever the card is actually on-screen.
   thumbUrl?: string | null;
   className?: string;
   // How the still/fallback image fits its box: "cover" fills the frame (cropping
@@ -72,12 +73,13 @@ export default function AnymonCanvas({
   fit?: "contain" | "cover";
   // When false, show the still image instead of a live WebGL canvas. Each
   // <Canvas> is its own WebGL context, and mobile browsers (esp. iOS Safari) cap
-  // simultaneous contexts at ~8 — exceeding it silently drops contexts so models
-  // render WHITE. Callers that show many models at once (the deck grid) keep
-  // most cards idle (showing the 3D thumbnail) and only go live on focus.
+  // simultaneous contexts — exceeding it silently drops contexts so models render
+  // white. The deck only sets active for cards currently scrolled into view, so
+  // the live-context count stays bounded to the handful you can actually see.
   active?: boolean;
 }) {
-  const stillSrc = thumbUrl || spriteFallback;
+  // Prefer the white-background sprite over Meshy's black-background thumbnail.
+  const stillSrc = spriteFallback || thumbUrl;
   const fallback = stillSrc ? (
     // eslint-disable-next-line @next/next/no-img-element
     <img

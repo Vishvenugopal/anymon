@@ -268,6 +268,7 @@ function AnymonCard({
   onChanged,
   onDeploy,
   onDelete,
+  scrollRef,
   idx = 0,
 }: {
   a: Anymon;
@@ -276,6 +277,8 @@ function AnymonCard({
   onDeploy?: (a: Anymon) => void;
   /** Opens the shared delete-confirm modal. */
   onDelete?: (a: Anymon) => void;
+  /** The scrolling deck container, used as the IntersectionObserver root. */
+  scrollRef?: React.RefObject<HTMLDivElement>;
   idx?: number;
 }) {
   const [busy, setBusy] = useState(false);
@@ -290,6 +293,10 @@ function AnymonCard({
   // white. Desktop: hover. Touch: tap to pin, or press-drag to tilt.
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
+  // Live 3D mounts only while the card is scrolled into view, so the number of
+  // simultaneous WebGL contexts stays bounded to the few visible cards (more than
+  // that on mobile drops contexts → white models).
+  const [inView, setInView] = useState(false);
   const downRef = useRef<{ x: number; y: number } | null>(null);
 
   // Card transform is driven by motion values + springs (NOT React state), so the
@@ -367,6 +374,18 @@ function AnymonCard({
       cardScale.set(1);
     }
   }, [hovered, pinned, dragging, rotX, rotY, cardScale]);
+
+  // Mount the live 3D only for on-screen cards (root = the scrolling deck list).
+  useEffect(() => {
+    const node = cardRef.current;
+    if (!node) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { root: scrollRef?.current ?? null, rootMargin: "200px 0px" },
+    );
+    obs.observe(node);
+    return () => obs.disconnect();
+  }, [scrollRef]);
 
   const hurt = a.hp < a.maxHp;
   const cost = healCost(a);
@@ -465,7 +484,7 @@ function AnymonCard({
                 glbUrl={a.status === "ready" ? a.glbUrl : null}
                 spriteFallback={a.spriteDataUri}
                 thumbUrl={a.thumbUrl}
-                active={active3d}
+                active={inView}
                 fit="cover"
                 className="h-full w-full"
               />
@@ -623,6 +642,10 @@ export default function DeckView({
   const captured = anymons.filter((a) => a.state === "captured");
   const totalCoins = anymons.reduce((s, a) => s + a.coins, 0);
 
+  // The scrolling list, used as each card's IntersectionObserver root so only
+  // on-screen cards mount a live 3D WebGL context.
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   // Shared modal: { mode: "info" } for the "?" explainer, a deploy confirm, or a
   // delete confirm.
   const [modal, setModal] = useState<
@@ -683,7 +706,10 @@ export default function DeckView({
       {/* Red dot field rising from the bottom (behind content + bottom menu). */}
       <div className="deck-dots-red pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[36%]" />
 
-      <div className="no-scrollbar relative z-10 h-full overflow-y-auto p-4 pb-24">
+      <div
+        ref={scrollRef}
+        className="no-scrollbar relative z-10 h-full overflow-y-auto p-4 pb-24"
+      >
         <div className="mb-4">
           {/* Sign-out: proper button, grey accents, pinned to the top-right. */}
           <button
@@ -738,6 +764,7 @@ export default function DeckView({
                   setModal({ mode: "confirm", a: target });
                 }}
                 onDelete={openDelete}
+                scrollRef={scrollRef}
                 idx={i}
               />
             ))}
@@ -764,6 +791,7 @@ export default function DeckView({
                   a={a}
                   onChanged={onChanged}
                   onDelete={openDelete}
+                  scrollRef={scrollRef}
                   idx={i}
                 />
               ))}
