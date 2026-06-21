@@ -5,12 +5,15 @@ import { NEARBY_RADIUS_M, rarityMaxHp, type Anymon } from "@/lib/types";
 
 export const runtime = "nodejs";
 
-// Varied rarities so the UI shows a spread of stars (1-5) on the radar.
+// Commonness-based rarity: MOST wild seeds are common everyday objects (1 star),
+// with a couple of uncommon (2-3) and a single genuinely rare find (5 star) so
+// the radar shows a believable, harsh spread rather than inflated stars.
 const SEEDS = [
-  { object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA", rarity: 2 },
-  { object: "waterbottle", name: "Aquaflask", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 5 },
-  { object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK", rarity: 3 },
-  { object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France", rarity: 4 },
+  { object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA", rarity: 1 },
+  { object: "cup", name: "Muglet", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 1 },
+  { object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK", rarity: 2 },
+  { object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France", rarity: 1 },
+  { object: "telescope", name: "Scopestar", owner: "orbit-1a2b", city: "Reykjavik", country: "Iceland", rarity: 5 },
 ];
 
 function offset(lat: number, lng: number, meters: number, bearingDeg: number) {

@@ -3,7 +3,7 @@ import { generateAnymonSprite } from "./gemini";
 import { create3D, get3D, is3DMock, provider } from "./threed";
 import { isRasterImage } from "./meshy";
 import { placeholderSprite, sampleGlb } from "./placeholder";
-import { rarityMaxHp, rollRarity, type Anymon } from "./types";
+import { clampRarity, rarityMaxHp, type Anymon } from "./types";
 
 // The IMAGE half (object label + 2D sprite) is mocked when its keys are absent
 // or MOCK_PIPELINE=1. The 3D half is handled separately by the threed provider.
@@ -28,9 +28,39 @@ export interface CaptureInput {
  */
 export async function runCapture(input: CaptureInput): Promise<Anymon> {
   const id = crypto.randomUUID();
-  // Roll rarity once at capture (weighted so 4-5 stars are rare) and derive HP.
-  const rarity = rollRarity();
-  const maxHp = rarityMaxHp(rarity);
+
+  // 1) object label + creative name + commonness-based rarity + 2) 2D sprite.
+  // Rarity now reflects how COMMON the object is (harsh): everyday objects = 1,
+  // only genuinely rare/unusual things = 5. Default to 1 if Claude is unavailable.
+  let object = "mystery";
+  let name = creativeName(object);
+  let rarity = 1; // harsh fallback: assume common unless Claude says otherwise
+  let sprite: string;
+  if (isImageMock()) {
+    sprite = placeholderSprite(object);
+  } else {
+    try {
+      const idn = await identifyAndName(input.imageBase64);
+      object = idn.object;
+      name = idn.name;
+      rarity = idn.rarity;
+    } catch (e) {
+      console.error("identifyAndName failed", e);
+      object = "creature";
+      name = creativeName(object);
+      rarity = 1;
+    }
+    try {
+      sprite = await generateAnymonSprite(input.imageBase64, object);
+    } catch (e) {
+      console.error("generateAnymonSprite failed", e);
+      sprite = placeholderSprite(object);
+    }
+  }
+
+  // Derive HP from the (commonness-based) rarity. Keeps rarity->stat scaling as-is.
+  const safeRarity = clampRarity(rarity);
+  const maxHp = rarityMaxHp(safeRarity);
   const base: Omit<Anymon, "object" | "name" | "spriteDataUri" | "meshyTaskId"> = {
     id,
     ownerId: input.ownerId,
@@ -45,37 +75,13 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
     lng: input.lng,
     createdAt: Date.now(),
     deployedAt: null,
-    rarity,
+    rarity: safeRarity,
     maxHp,
     hp: maxHp,
     pendingWins: 0,
     pendingCoins: 0,
     capturedBy: null,
   };
-
-  // 1) object label + creative name + 2) 2D sprite
-  let object = "mystery";
-  let name = creativeName(object);
-  let sprite: string;
-  if (isImageMock()) {
-    sprite = placeholderSprite(object);
-  } else {
-    try {
-      const id = await identifyAndName(input.imageBase64);
-      object = id.object;
-      name = id.name;
-    } catch (e) {
-      console.error("identifyAndName failed", e);
-      object = "creature";
-      name = creativeName(object);
-    }
-    try {
-      sprite = await generateAnymonSprite(input.imageBase64, object);
-    } catch (e) {
-      console.error("generateAnymonSprite failed", e);
-      sprite = placeholderSprite(object);
-    }
-  }
 
   // 3) kick off 3D. Sentinels for meshyTaskId:
   //   "mock"   -> intentional no-keys demo path (resolveGlb serves a sample GLB)
@@ -128,6 +134,12 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
 
 const MOCK_INCUBATE_MS = 6000;
 
+// Hard cap on real 3D generation. If a provider task hasn't finished within this
+// window we STOP polling and resolve to a terminal "failed" so the UI can never
+// incubate forever (the 2D sprite is still shown). Meshy/TRELLIS usually finish
+// well under this; the mock/demo path resolves in MOCK_INCUBATE_MS regardless.
+const MAX_INCUBATE_MS = 3 * 60_000;
+
 /** Resolves the 3D model status for an Anymon (mock = timed, real = provider). */
 export async function resolveGlb(
   a: Anymon,
@@ -140,6 +152,20 @@ export async function resolveGlb(
   // rather than silently serving a random sample GLB (the placeholder bug). The
   // 2D sprite still renders via spriteFallback; the UI can offer a retry.
   if (a.meshyTaskId === "failed" || a.status === "failed") {
+    return { status: "failed", glbUrl: null, progress: 100 };
+  }
+
+  // Watchdog: a real task (provider id or hfspace background job) that runs past
+  // MAX_INCUBATE_MS is treated as failed so status polling always terminates.
+  // The mock/demo path (no real provider) is exempt — it resolves on its own.
+  const incubatingTooLong = Date.now() - a.createdAt > MAX_INCUBATE_MS;
+  const isRealTask =
+    !is3DMock() && !!a.meshyTaskId && a.meshyTaskId !== "mock";
+  if (isRealTask && incubatingTooLong) {
+    console.error(
+      `[pipeline] ${a.id}: 3D generation exceeded ${MAX_INCUBATE_MS}ms ` +
+        `(task=${a.meshyTaskId}) — marking failed so the UI stops incubating.`,
+    );
     return { status: "failed", glbUrl: null, progress: 100 };
   }
 

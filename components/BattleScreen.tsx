@@ -12,23 +12,35 @@ import {
   type Matchup,
   type Move,
 } from "@/lib/client";
-import type { MatchupDir, MoveKind } from "@/lib/types";
+import type { MoveKind } from "@/lib/types";
 
 // Pokedex-style move tile: edge-colored outline + a y-only (x=0) shadow that is a
 // DARKER shade of that same edge color (never black), matching the rest of the app.
+// Text is dark ink on every tile so it stays consistent + readable across fills.
 function moveTileClass(kind: MoveKind): string {
   if (kind === "status")
-    return "bg-anymon-berry border-anymon-edgeberry text-anymon-white shadow-[0_3px_0_0_#9E2138]";
+    return "bg-anymon-berry border-anymon-edgeberry text-anymon-ink shadow-[0_3px_0_0_#9E2138]";
   if (kind === "special")
-    return "bg-anymon-ocean border-anymon-edgeocean text-anymon-white shadow-[0_3px_0_0_#1F5F79]";
+    return "bg-anymon-ocean border-anymon-edgeocean text-anymon-ink shadow-[0_3px_0_0_#1F5F79]";
   return "bg-anymon-lime border-anymon-edgelime text-anymon-ink shadow-[0_3px_0_0_#3C6E22]";
 }
 
 /** Big, easy-to-read Pokedex-style stat readout (power / accuracy). */
-function MoveStat({ label, value }: { label: string; value: number }) {
+function MoveStat({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  suffix?: string;
+}) {
   return (
     <span className="flex flex-col items-center leading-none">
-      <span className="font-retro text-xl leading-none">{value}</span>
+      <span className="font-retro text-xl leading-none">
+        {value}
+        {suffix}
+      </span>
       <span className="text-[8px] uppercase tracking-widest opacity-80">{label}</span>
     </span>
   );
@@ -58,37 +70,19 @@ function effLabel(mult: number): string {
   return "";
 }
 
+// Color the multiplier by VALUE: above 1x reads green (good), below 1x reads red
+// (bad), exactly 1x stays neutral.
 function multClass(mult: number): string {
-  if (mult >= 1.5) return "text-anymon-edgeberry";
-  if (mult <= 0.5) return "text-anymon-ocean";
+  if (mult > 1) return "text-anymon-edgelime";
+  if (mult < 1) return "text-anymon-berry";
   return "text-anymon-ink/50";
 }
 
-function MatchupLine({
-  from,
-  to,
-  dir,
-}: {
-  from: string;
-  to: string;
-  dir: MatchupDir;
-}) {
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-1 leading-snug">
-      <span className="font-bold">{from}</span>
-      <span className="text-anymon-ink/40">▸</span>
-      <span className="font-bold">{to}</span>
-      <span className={`font-retro ${multClass(dir.multiplier)}`}>
-        ×{dir.multiplier}
-      </span>
-      {dir.reason && (
-        <span className="text-anymon-ink/60">{dir.reason}</span>
-      )}
-    </div>
-  );
-}
-
-/** Persistent (non-toast) type-matchup box — sits just above the log, subtle. */
+/**
+ * Persistent (non-toast) type-matchup box — sits just above the log, subtle.
+ * Shows ONLY the advantage direction (the disadvantage is just its inverse), and
+ * a single description that explains both the upside and downside together.
+ */
 function WeaknessBox({
   matchup,
   youName,
@@ -99,16 +93,36 @@ function WeaknessBox({
   foeName: string;
 }) {
   if (!matchup) return null;
+  const youToFoe = matchup.aToB;
+  const foeToYou = matchup.bToA;
+  const youAdv = youToFoe.multiplier >= foeToYou.multiplier;
+  const adv = youAdv ? youToFoe : foeToYou;
+  const other = youAdv ? foeToYou : youToFoe;
+  const advFrom = youAdv ? youName : foeName;
+  const advTo = youAdv ? foeName : youName;
+  const desc = [adv.reason, other.reason]
+    .filter(Boolean)
+    .filter((r, i, a) => a.indexOf(r) === i)
+    .join(" — ");
   return (
     <div className="mb-2 rounded-gummy border border-anymon-edgecloud bg-white/90 px-3 py-1.5 text-anymon-ink shadow-[0_2px_0_0_#C2D5CC]">
       <div className="flex items-center gap-1 font-retro text-[9px] uppercase tracking-widest text-anymon-ink/55">
         <span>type matchup</span>
         {matchup.field && <span className="text-anymon-ocean">· {matchup.field}</span>}
       </div>
-      <div className="mt-0.5 space-y-0.5 text-[11px]">
-        <MatchupLine from={youName} to={foeName} dir={matchup.aToB} />
-        <MatchupLine from={foeName} to={youName} dir={matchup.bToA} />
+      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1 text-[12px] leading-snug">
+        <span className="font-bold">{advFrom}</span>
+        <span className="text-anymon-ink/40">▸</span>
+        <span className="font-bold">{advTo}</span>
+        <span className={`font-retro ${multClass(adv.multiplier)}`}>
+          ×{adv.multiplier}
+        </span>
       </div>
+      {desc && (
+        <div className="mt-0.5 text-[11px] leading-snug text-anymon-ink/60">
+          {desc}
+        </div>
+      )}
     </div>
   );
 }
@@ -237,6 +251,27 @@ export default function BattleScreen({
   const busyRef = useRef(false);
   const endedRef = useRef(false);
 
+  // Pacing: hold each action on screen ~3s so it can be read, but let a tap
+  // anywhere skip straight to the next step. `skipRef` resolves the pending step.
+  const STEP_MS = 3000;
+  const skipRef = useRef<(() => void) | null>(null);
+  const waitStep = useCallback(
+    (ms = STEP_MS) =>
+      new Promise<void>((resolve) => {
+        const finish = () => {
+          clearTimeout(timer);
+          skipRef.current = null;
+          resolve();
+        };
+        const timer = setTimeout(finish, ms);
+        skipRef.current = finish;
+      }),
+    [],
+  );
+  const advance = useCallback(() => {
+    skipRef.current?.();
+  }, []);
+
   const finish = useCallback(
     async (winnerId: string) => {
       endedRef.current = true;
@@ -286,7 +321,7 @@ export default function BattleScreen({
         const healed = Math.min(max, ref.current + STATUS_HEAL);
         (isPlayer ? setA : setD)(healed);
         setLog(`${actor.name} used ${move.name}! ${move.blurb}`);
-        await wait(1100);
+        await waitStep();
         return;
       }
 
@@ -296,7 +331,7 @@ export default function BattleScreen({
       const r = roll(move, eff);
       if (r.miss) {
         setLog(`${actor.name} used ${move.name}… but it missed!`);
-        await wait(1000);
+        await waitStep();
         return;
       }
 
@@ -316,9 +351,9 @@ export default function BattleScreen({
           r.crit ? "Critical hit! " : ""
         }${science}`,
       );
-      await wait(1150);
+      await waitStep();
     },
-    [attacker, defender, matchup],
+    [attacker, defender, matchup, waitStep],
   );
 
   const chooseEnemyMove = useCallback((): Move => {
@@ -355,6 +390,14 @@ export default function BattleScreen({
     [phase, doAttack, chooseEnemyMove, finish, attacker.id, defender.id],
   );
 
+  // Forfeit/exit: free the defender lock now and bail out. Set endedRef so the
+  // unmount cleanup below doesn't fire a second cancel.
+  const giveUp = useCallback(() => {
+    endedRef.current = true;
+    apiBattleCancel(defender.id);
+    onClose();
+  }, [defender.id, onClose]);
+
   // Release the defender lock if the player leaves mid-battle (resolve already
   // frees it on a finished battle).
   useEffect(() => {
@@ -367,6 +410,7 @@ export default function BattleScreen({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
+      onClick={advance}
       // High z-index + isolate so the scanner's nearby-Anymon nameplates can
       // never poke through this battle screen.
       className="absolute inset-0 z-[100] isolate flex flex-col overflow-hidden bg-anymon-cloud"
@@ -389,9 +433,25 @@ export default function BattleScreen({
         )}
       </div>
 
+      {/* GIVE UP (forfeit + exit) — top-left, clear escape hatch */}
+      {phase !== "result" && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            giveUp();
+          }}
+          className="absolute left-3 top-3 z-30 rounded-gummy border-2 border-anymon-edgeberry bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-berry shadow-[0_2px_0_0_#9E2138] active:translate-y-[2px] active:shadow-none"
+        >
+          give up
+        </button>
+      )}
+
       {/* AR / non-AR toggle */}
       <button
-        onClick={() => setArOn((v) => !v)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setArOn((v) => !v);
+        }}
         className="absolute right-3 top-3 z-30 rounded-gummy border-2 border-anymon-edgecloud bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-ink shadow-[0_2px_0_0_#C2D5CC] active:translate-y-[2px] active:shadow-none"
       >
         {arOn ? "ar: on" : "ar: off"}
@@ -453,8 +513,10 @@ export default function BattleScreen({
                 >
                   <span className="text-sm font-bold leading-tight">{m.name}</span>
                   <div className="flex items-center gap-3">
-                    {m.kind !== "status" && <MoveStat label="pow" value={m.power} />}
-                    <MoveStat label="acc" value={m.accuracy} />
+                    {m.kind !== "status" && (
+                      <MoveStat label="Power" value={m.power} />
+                    )}
+                    <MoveStat label="Accuracy" value={m.accuracy} suffix="%" />
                     {m.kind === "status" && (
                       <span className="text-[9px] uppercase tracking-widest opacity-80">
                         support
@@ -475,7 +537,7 @@ export default function BattleScreen({
             />
           ) : (
             <div className="flex h-[4.5rem] items-center justify-center font-retro text-xs tracking-widest text-anymon-ink/60">
-              {phase === "resolving" ? "resolving…" : "…"}
+              {phase === "resolving" ? "resolving…" : "tap to continue ▸"}
             </div>
           )}
         </div>
@@ -509,7 +571,7 @@ function ResultPanel({
         </div>
         <div className="mt-1 flex items-center justify-center gap-3 text-sm">
           {result.coinsAwarded > 0 && youWon && (
-            <span className="rounded-full bg-yellow-400/90 px-3 py-1 font-bold text-yellow-900">
+            <span className="rounded-full border-2 border-anymon-edgecoin bg-white px-3 py-1 font-bold text-anymon-coin shadow-[0_2px_0_0_#92400e]">
               +{result.coinsAwarded} coins
             </span>
           )}

@@ -33,11 +33,11 @@ const config: Config = {
           edgecard: "#B23647",
           // for dark/ink panels: a deep cool teal-black (not pure black)
           edgeink: "#04222a",
-          // ---- coins (amber) ----
-          // coin text color + a darker amber "edge" for the counter border/shadow
+          // ---- coins (golden yellow / amber-gold) ----
+          // coin text color + a darker golden "edge" for the counter border/shadow
           // so the counter outline reads as a tint of its own text (design rule).
-          coin: "#D97706",
-          edgecoin: "#B45309",
+          coin: "#EAB308",
+          edgecoin: "#A16207",
           // dark, faded card-red used for emphasis text (e.g. "Trainer X")
           cardink: "#8C2B38",
         },

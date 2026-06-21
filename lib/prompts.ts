@@ -20,14 +20,24 @@ export function anymonStylePrompt(object: string): string {
 export const OBJECT_ID_PROMPT =
   "Identify the single primary physical object in this image. Reply with ONLY one lowercase noun, no punctuation, no extra words. If unclear, give your best single-word guess.";
 
-// Capture-time identify + creative name in one Claude call.
+// Capture-time identify + creative name + commonness-based rarity in one call.
 export const IDENTIFY_AND_NAME_PROMPT = [
-  "Look at this image. Identify the single primary physical object, then invent a fun",
-  "Pokemon-style creature name for an 'Anymon' based on it. The name should HINT at the",
-  "real object (blend its word with a creature-y suffix), be catchy, 3-14 letters, one word,",
-  "no spaces, capitalized like a Pokemon (e.g. a mug -> 'Muglet', a bottle -> 'Aquaflask',",
-  "a lamp -> 'Lumosaur', a book -> 'Tomeling').",
-  'Respond with ONLY a JSON object, no markdown fences: {"object":"<one lowercase noun>","name":"<CreativeName>"}',
+  "Look at this image. Identify the single primary physical object, then:",
+  "(1) invent a fun Pokemon-style creature name for an 'Anymon' based on it. The name should",
+  "HINT at the real object (blend its word with a creature-y suffix), be catchy, 3-14 letters,",
+  "one word, no spaces, capitalized like a Pokemon (e.g. a mug -> 'Muglet', a bottle ->",
+  "'Aquaflask', a lamp -> 'Lumosaur', a book -> 'Tomeling').",
+  "(2) rate how COMMON the object is in everyday life on an integer 1-5 scale, where rarity",
+  "reflects how rarely an ordinary person encounters the object:",
+  "1 = ubiquitous everyday object almost everyone owns/sees daily (phone, cup, mug, pen,",
+  "pencil, chair, shoe, book, spoon, fork, key, bottle, laptop, plate, sock);",
+  "2 = common household/workplace object seen often;",
+  "3 = uncommon object not seen every day;",
+  "4 = rare object most people seldom encounter;",
+  "5 = genuinely rare, unusual, exotic, antique, collectible, or special object.",
+  "Be HARSH and conservative: ordinary everyday objects MUST be 1. Do NOT inflate. Only give",
+  "4 or 5 to things the average person rarely or almost never sees in daily life.",
+  'Respond with ONLY a JSON object, no markdown fences: {"object":"<one lowercase noun>","name":"<CreativeName>","rarity":<1-5 integer>}',
 ].join(" ");
 
 // ---- Matchup reasoning (the "weakness initialization") ----

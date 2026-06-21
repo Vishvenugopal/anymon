@@ -369,6 +369,17 @@ function MiniRadar({ blips, heading }: { blips: Blip[]; heading: number | null }
         <div className="absolute inset-[22%] rounded-full border border-anymon-lime/20" />
         {/* you (always center, facing up) */}
         <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_8px_#fff]" />
+        {/* heading indicator: a small triangle pointing UP = the way you face */}
+        <div
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-[14px] drop-shadow-[0_0_4px_rgba(139,224,30,0.9)]"
+          style={{
+            width: 0,
+            height: 0,
+            borderLeft: "5px solid transparent",
+            borderRight: "5px solid transparent",
+            borderBottom: "8px solid #8BE01E",
+          }}
+        />
         {/* sweep */}
         <div className="absolute inset-0 animate-[spin_4s_linear_infinite] rounded-full bg-[conic-gradient(from_0deg,rgba(139,224,30,0.35),transparent_25%)]" />
         {blips.map((b) => {
@@ -388,7 +399,7 @@ function MiniRadar({ blips, heading }: { blips: Blip[]; heading: number | null }
             />
           );
         })}
-        <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 font-retro text-[8px] tracking-widest text-anymon-lime">
+        <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 font-retro text-sm tracking-widest text-anymon-lime">
           radar
         </div>
       </div>

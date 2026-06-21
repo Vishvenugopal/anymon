@@ -4,9 +4,12 @@ import Image from "next/image";
 
 export type Tab = "scanner" | "deck";
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "scanner", label: "scan", icon: "📷" },
-  { id: "deck", label: "deck", icon: "🎒" },
+// Flat PNG/SVG icons (official Microsoft "Fluent Emoji", MIT-licensed) so the
+// nav renders identically on every platform instead of falling back to each
+// OS's own emoji font. See public/icons/.
+const TABS: { id: Tab; label: string; icon: string; alt: string }[] = [
+  { id: "scanner", label: "scan", icon: "/icons/camera.svg", alt: "camera" },
+  { id: "deck", label: "deck", icon: "/icons/backpack.svg", alt: "backpack" },
 ];
 
 export default function BottomNav({
@@ -30,13 +33,16 @@ export default function BottomNav({
           active ? "text-anymon-lime" : "text-anymon-ink/50"
         }`}
       >
-        <span
-          className={`text-3xl transition-transform ${
-            active ? "-translate-y-0.5 scale-110 -rotate-12" : ""
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={t.icon}
+          alt={t.alt}
+          width={40}
+          height={40}
+          className={`h-10 w-10 select-none transition-transform ${
+            active ? "-translate-y-0.5 scale-110 -rotate-12" : "opacity-60"
           }`}
-        >
-          {t.icon}
-        </span>
+        />
         {t.id === "scanner" && nearbyCount > 0 && (
           <span className="absolute right-1 top-0 rounded-full bg-anymon-ocean px-1.5 text-[10px] text-white">
             {nearbyCount}

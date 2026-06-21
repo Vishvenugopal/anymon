@@ -11,7 +11,7 @@ import {
   apiPvpRoom,
   type BattleRoom,
 } from "@/lib/client";
-import type { BattleFighter, MatchupDir, Matchup, MoveKind } from "@/lib/types";
+import type { BattleFighter, Matchup, MoveKind } from "@/lib/types";
 
 const POLL_MS = 1000;
 
@@ -23,19 +23,31 @@ function hpColor(pct: number): string {
 
 // Pokedex-style move tile: edge-colored outline + a y-only (x=0) shadow that is a
 // DARKER shade of that same edge color (never black), matching the rest of the app.
+// Text is dark ink on every tile so it stays consistent + readable across fills.
 function moveTileClass(kind: MoveKind): string {
   if (kind === "status")
-    return "bg-anymon-berry border-anymon-edgeberry text-anymon-white shadow-[0_3px_0_0_#9E2138]";
+    return "bg-anymon-berry border-anymon-edgeberry text-anymon-ink shadow-[0_3px_0_0_#9E2138]";
   if (kind === "special")
-    return "bg-anymon-ocean border-anymon-edgeocean text-anymon-white shadow-[0_3px_0_0_#1F5F79]";
+    return "bg-anymon-ocean border-anymon-edgeocean text-anymon-ink shadow-[0_3px_0_0_#1F5F79]";
   return "bg-anymon-lime border-anymon-edgelime text-anymon-ink shadow-[0_3px_0_0_#3C6E22]";
 }
 
 /** Big, easy-to-read Pokedex-style stat readout (power / accuracy). */
-function MoveStat({ label, value }: { label: string; value: number }) {
+function MoveStat({
+  label,
+  value,
+  suffix,
+}: {
+  label: string;
+  value: number;
+  suffix?: string;
+}) {
   return (
     <span className="flex flex-col items-center leading-none">
-      <span className="font-retro text-xl leading-none">{value}</span>
+      <span className="font-retro text-xl leading-none">
+        {value}
+        {suffix}
+      </span>
       <span className="text-[8px] uppercase tracking-widest opacity-80">{label}</span>
     </span>
   );
@@ -55,35 +67,19 @@ function RarityStars({ rarity }: { rarity: number }) {
   );
 }
 
+// Color the multiplier by VALUE: above 1x reads green (good), below 1x reads red
+// (bad), exactly 1x stays neutral.
 function multClass(mult: number): string {
-  if (mult >= 1.5) return "text-anymon-edgeberry";
-  if (mult <= 0.5) return "text-anymon-ocean";
+  if (mult > 1) return "text-anymon-edgelime";
+  if (mult < 1) return "text-anymon-berry";
   return "text-anymon-ink/50";
 }
 
-function MatchupLine({
-  from,
-  to,
-  dir,
-}: {
-  from: string;
-  to: string;
-  dir: MatchupDir;
-}) {
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-1 leading-snug">
-      <span className="font-bold">{from}</span>
-      <span className="text-anymon-ink/40">▸</span>
-      <span className="font-bold">{to}</span>
-      <span className={`font-retro ${multClass(dir.multiplier)}`}>
-        ×{dir.multiplier}
-      </span>
-      {dir.reason && <span className="text-anymon-ink/60">{dir.reason}</span>}
-    </div>
-  );
-}
-
-/** Persistent (non-toast) type-matchup box — sits just above the log, subtle. */
+/**
+ * Persistent (non-toast) type-matchup box — sits just above the log, subtle.
+ * Shows ONLY the advantage direction (the disadvantage is just its inverse), and
+ * a single description that explains both the upside and downside together.
+ */
 function WeaknessBox({
   matchup,
   meIsChallenger,
@@ -99,16 +95,34 @@ function WeaknessBox({
   // matchup.aToB = challenger -> opponent. Orient it from "me" to "foe".
   const youToFoe = meIsChallenger ? matchup.aToB : matchup.bToA;
   const foeToYou = meIsChallenger ? matchup.bToA : matchup.aToB;
+  const youAdv = youToFoe.multiplier >= foeToYou.multiplier;
+  const adv = youAdv ? youToFoe : foeToYou;
+  const other = youAdv ? foeToYou : youToFoe;
+  const advFrom = youAdv ? youName : foeName;
+  const advTo = youAdv ? foeName : youName;
+  const desc = [adv.reason, other.reason]
+    .filter(Boolean)
+    .filter((r, i, a) => a.indexOf(r) === i)
+    .join(" — ");
   return (
     <div className="mb-2 rounded-gummy border border-anymon-edgecloud bg-white/90 px-3 py-1.5 text-anymon-ink shadow-[0_2px_0_0_#C2D5CC]">
       <div className="flex items-center gap-1 font-retro text-[9px] uppercase tracking-widest text-anymon-ink/55">
         <span>type matchup</span>
         {matchup.field && <span className="text-anymon-ocean">· {matchup.field}</span>}
       </div>
-      <div className="mt-0.5 space-y-0.5 text-[11px]">
-        <MatchupLine from={youName} to={foeName} dir={youToFoe} />
-        <MatchupLine from={foeName} to={youName} dir={foeToYou} />
+      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1 text-[12px] leading-snug">
+        <span className="font-bold">{advFrom}</span>
+        <span className="text-anymon-ink/40">▸</span>
+        <span className="font-bold">{advTo}</span>
+        <span className={`font-retro ${multClass(adv.multiplier)}`}>
+          ×{adv.multiplier}
+        </span>
       </div>
+      {desc && (
+        <div className="mt-0.5 text-[11px] leading-snug text-anymon-ink/60">
+          {desc}
+        </div>
+      )}
     </div>
   );
 }
@@ -252,6 +266,10 @@ export default function PvpBattleScreen({
   }, [roomId, onClose]);
 
   const lastEntries = room ? room.log.slice(-2) : [];
+  // The AR camera only belongs on the actual battlefield. The handshake /
+  // waiting / result-of-invite screens render on a clean cream surface that
+  // matches the deck + scanner screens (no dark gradient).
+  const inArena = !!room && (room.status === "active" || room.status === "finished");
 
   return (
     <motion.div
@@ -261,9 +279,10 @@ export default function PvpBattleScreen({
       // never poke through this battle screen.
       className="absolute inset-0 z-[100] isolate flex flex-col overflow-hidden bg-anymon-cloud"
     >
-      {/* background: live AR camera feed, or a neutral solid color */}
+      {/* background: live AR camera feed on the battlefield, or a neutral cream
+          surface (also used for the whole accept/decline handshake) */}
       <div className="pointer-events-none absolute inset-0">
-        {arOn ? (
+        {arOn && inArena ? (
           <>
             <Webcam
               audio={false}
@@ -280,34 +299,38 @@ export default function PvpBattleScreen({
       </div>
 
       <div className="relative z-10 flex items-center justify-between px-4 pt-4">
-        <span className="rounded-gummy bg-anymon-ink/80 px-3 py-1 font-retro text-sm tracking-widest text-anymon-lime shadow-[0_2px_0_0_#02161b]">
-          trainer battle
-        </span>
+        {/* GIVE UP (forfeit + exit) — top-left, clear escape hatch */}
+        <button
+          onClick={cancel}
+          className="rounded-gummy border-2 border-anymon-edgeberry bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-berry shadow-[0_2px_0_0_#9E2138] active:translate-y-[2px] active:shadow-none"
+        >
+          give up
+        </button>
         <div className="flex items-center gap-2">
+          <span className="rounded-gummy border-2 border-anymon-edgelime bg-white/90 px-3 py-1 font-retro text-[11px] tracking-widest text-anymon-edgelime shadow-[0_2px_0_0_#3C6E22]">
+            trainer battle
+          </span>
           <button
             onClick={() => setArOn((v) => !v)}
-            className="rounded-gummy border-2 border-anymon-white/40 bg-anymon-ink/75 px-3 py-0.5 text-[10px] font-bold uppercase tracking-widest text-anymon-white/90 active:translate-y-[2px]"
+            className="rounded-gummy border-2 border-anymon-edgecloud bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-ink shadow-[0_2px_0_0_#C2D5CC] active:translate-y-[2px] active:shadow-none"
           >
             {arOn ? "ar: on" : "ar: off"}
-          </button>
-          <button
-            onClick={cancel}
-            className="rounded-gummy border-2 border-anymon-white/40 bg-anymon-ink/75 px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-white/90"
-          >
-            {room?.status === "active" ? "forfeit" : "leave"}
           </button>
         </div>
       </div>
 
-      {/* invite handshake */}
+      {/* invite handshake — cream card, on-brand outlines + y-only shadows */}
       {amInvitee && room && (
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6">
-          <div className="flex flex-col items-center gap-4 rounded-gummy bg-anymon-ink/75 px-6 py-6 text-center text-anymon-white shadow-retro-lg">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-gummy border-2 border-anymon-edgecloud bg-white px-6 py-6 text-center text-anymon-ink shadow-gummy">
+            <span className="font-retro text-[10px] uppercase tracking-widest text-anymon-ink/55">
+              incoming challenge
+            </span>
             <Fighter f={room.challenger} size="h-28 w-28" bob />
-            <div className="preserve-case text-lg">
+            <div className="preserve-case text-lg text-anymon-cardink">
               Trainer {room.challenger.username} challenges you!
             </div>
-            <div className="text-sm opacity-80">
+            <div className="text-sm text-anymon-ink/70">
               sends out {room.challenger.name} ({room.challenger.object})
             </div>
             {!myFighterId && (
@@ -319,14 +342,14 @@ export default function PvpBattleScreen({
               <button
                 onClick={() => respond(true)}
                 disabled={submitting || !myFighterId}
-                className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-5 py-2 uppercase tracking-wide text-anymon-ink shadow-gummy-lime disabled:opacity-50"
+                className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-5 py-2 uppercase tracking-wide text-anymon-ink shadow-gummy-lime active:translate-y-[2px] active:shadow-none disabled:opacity-50"
               >
                 accept
               </button>
               <button
                 onClick={() => respond(false)}
                 disabled={submitting}
-                className="rounded-gummy border-2 border-anymon-white/40 px-5 py-2 uppercase tracking-wide text-anymon-white/80"
+                className="rounded-gummy border-2 border-anymon-edgeberry bg-white px-5 py-2 uppercase tracking-wide text-anymon-berry shadow-[0_3px_0_0_#9E2138] active:translate-y-[2px] active:shadow-none disabled:opacity-50"
               >
                 decline
               </button>
@@ -335,29 +358,29 @@ export default function PvpBattleScreen({
         </div>
       )}
 
-      {/* challenger waiting */}
+      {/* challenger waiting — matching cream card */}
       {room?.status === "pending" && meIsChallenger && (
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6">
-          <div className="flex flex-col items-center gap-4 rounded-gummy bg-anymon-ink/75 px-6 py-6 text-center text-anymon-white shadow-retro-lg">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-gummy border-2 border-anymon-edgecloud bg-white px-6 py-6 text-center text-anymon-ink shadow-gummy">
             <Fighter f={room.challenger} size="h-28 w-28" bob />
             <div className="text-lg">challenge sent!</div>
-            <div className="animate-pulse text-sm opacity-80">
+            <div className="animate-pulse text-sm text-anymon-ink/60">
               waiting for the other trainer to accept…
             </div>
           </div>
         </div>
       )}
 
-      {/* declined / cancelled */}
+      {/* declined / cancelled — matching cream card */}
       {room && (room.status === "declined" || room.status === "cancelled") && (
         <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6">
-          <div className="flex flex-col items-center gap-4 rounded-gummy bg-anymon-ink/75 px-6 py-6 text-center text-anymon-white shadow-retro-lg">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-gummy border-2 border-anymon-edgecloud bg-white px-6 py-6 text-center text-anymon-ink shadow-gummy">
             <div className="text-lg">
               {room.status === "declined" ? "challenge declined" : "battle cancelled"}
             </div>
             <button
               onClick={onClose}
-              className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-6 py-2 uppercase tracking-wide text-anymon-ink shadow-gummy-lime"
+              className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-6 py-2 uppercase tracking-wide text-anymon-ink shadow-gummy-lime active:translate-y-[2px] active:shadow-none"
             >
               ok
             </button>
@@ -418,8 +441,10 @@ export default function PvpBattleScreen({
                     >
                       <span className="text-sm font-bold leading-tight">{m.name}</span>
                       <div className="flex items-center gap-3">
-                        {m.kind !== "status" && <MoveStat label="pow" value={m.power} />}
-                        <MoveStat label="acc" value={m.accuracy} />
+                        {m.kind !== "status" && (
+                          <MoveStat label="Power" value={m.power} />
+                        )}
+                        <MoveStat label="Accuracy" value={m.accuracy} suffix="%" />
                         {m.kind === "status" && (
                           <span className="text-[9px] uppercase tracking-widest opacity-80">
                             support
@@ -482,7 +507,7 @@ function ResultPanel({
         </div>
         <div className="mt-1 flex items-center justify-center gap-3 text-sm">
           {youWon && room.coinsAwarded > 0 && (
-            <span className="rounded-full bg-yellow-400/90 px-3 py-1 font-bold text-yellow-900">
+            <span className="rounded-full border-2 border-anymon-edgecoin bg-white px-3 py-1 font-bold text-anymon-coin shadow-[0_2px_0_0_#92400e]">
               +{room.coinsAwarded} coins
             </span>
           )}

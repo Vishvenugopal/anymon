@@ -34,8 +34,20 @@ export default function SignIn() {
 
   return (
     <div className="relative flex h-full w-full flex-col bg-[#FBF6F3] text-anymon-ink">
-      {/* Match the main app screens: cream base + the rising red dot field. */}
-      <div className="deck-dots-red pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[36%]" />
+      {/* Match the main app screens: cream base + a rising lime/green dot field
+          (mirrors .deck-dots-red but in the app's primary green accent). */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[36%]"
+        style={{
+          backgroundImage: "radial-gradient(#8BE01E 1px, transparent 1.6px)",
+          backgroundSize: "6px 6px",
+          imageRendering: "pixelated",
+          WebkitMaskImage:
+            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 100%)",
+          maskImage:
+            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 100%)",
+        }}
+      />
 
       {/* Logo is pinned in a non-shrinking header so it's ALWAYS visible. */}
       <div className="relative z-10 flex shrink-0 justify-center px-8 pb-2 pt-12">
@@ -60,14 +72,14 @@ export default function SignIn() {
           Turn any object into an Anymon!
         </h1>
         <p className="preserve-case mt-2 text-center text-sm text-anymon-ink/60">
-          Learn science while collecting and fighting anymon!
+          Learn science while creating and fighting anymon!
         </p>
 
         <div className="mt-10 w-full max-w-xs space-y-3">
         <button
           onClick={() => go("google")}
           disabled={!!busy}
-          className="gummy-btn flex w-full items-center justify-center gap-3 bg-white py-3.5 text-anymon-ink shadow-gummy disabled:opacity-60"
+          className="gummy-btn flex w-full items-center justify-center gap-3 border-2 border-anymon-edgelime bg-white py-3.5 text-anymon-ink shadow-gummy-lime disabled:opacity-60"
         >
           <GoogleIcon />
           {busy === "google" ? "opening google…" : "sign in with google"}

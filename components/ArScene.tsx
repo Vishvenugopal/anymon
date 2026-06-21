@@ -170,8 +170,13 @@ function WildSprite({
   useEffect(() => {
     tex.colorSpace = THREE.SRGBColorSpace;
   }, [tex]);
+  // Cylindrical billboard: lock pitch/roll so the sprite stays UPRIGHT and
+  // world-anchored, only yawing to face the viewer horizontally. A full
+  // billboard would also rotate to face the camera as you tilt up/down, so it
+  // looked identical at every pitch; locking X/Z makes it foreshorten and slide
+  // up/down with the ground as the phone pitches (see CameraRig).
   return (
-    <Billboard position={[0, lift, 0]}>
+    <Billboard position={[0, lift, 0]} lockX lockZ>
       <mesh>
         <planeGeometry args={[height, height]} />
         <meshBasicMaterial map={tex} transparent alphaTest={0.4} opacity={opacity} />

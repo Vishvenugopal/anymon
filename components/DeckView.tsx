@@ -137,6 +137,43 @@ function AnymonCard({
   const [err, setErr] = useState<string | null>(null);
   const [coinFx, setCoinFx] = useState<number | null>(null);
   const ackedRef = useRef(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Touch devices have no :hover, so the tilt/lift/shine can't be seen. We
+  // reproduce the hover transform from a press-and-drag gesture: while a finger
+  // (or pen) is dragging on a non-button part of the card, map its position to
+  // the same rotateX/rotateY/scale that `whileHover` uses on desktop.
+  const [dragTilt, setDragTilt] = useState<{
+    rotateX: number;
+    rotateY: number;
+    scale: number;
+  } | null>(null);
+
+  const tiltFromPoint = (clientX: number, clientY: number) => {
+    const rect = cardRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const px = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    const py = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
+    // center => no tilt; edges => up to ~7deg (matches the whileHover values).
+    setDragTilt({
+      rotateX: (0.5 - py) * 14,
+      rotateY: (px - 0.5) * 14,
+      scale: 1.05,
+    });
+  };
+
+  // Mouse already gets real :hover; only drive this for touch/pen. Skip when the
+  // press starts on a button so taps (deploy/heal/recall) keep working normally.
+  const onCardPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse") return;
+    if ((e.target as HTMLElement).closest("button")) return;
+    tiltFromPoint(e.clientX, e.clientY);
+  };
+  const onCardPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" || !dragTilt) return;
+    tiltFromPoint(e.clientX, e.clientY);
+  };
+  const clearTilt = () => setDragTilt(null);
 
   const hurt = a.hp < a.maxHp;
   const cost = healCost(a);
@@ -176,22 +213,32 @@ function AnymonCard({
   return (
     <div className="relative">
       <motion.div
+        ref={cardRef}
         layout
         whileHover={{ rotateX: 7, rotateY: -7, scale: 1.05, zIndex: 30 }}
+        animate={
+          dragTilt
+            ? { ...dragTilt, zIndex: 30 }
+            : { rotateX: 0, rotateY: 0, scale: 1 }
+        }
         transition={{ type: "spring", stiffness: 240, damping: 18 }}
         style={{ transformPerspective: 720, rotateZ: tilt }}
+        onPointerDown={onCardPointerDown}
+        onPointerMove={onCardPointerMove}
+        onPointerUp={clearTilt}
+        onPointerCancel={clearTilt}
+        onPointerLeave={clearTilt}
         className="anymon-card group p-1.5"
       >
         {/* moving glossy foil sheen (above art, below text via z-index) */}
         <div className="card-sheen z-20" />
 
         <div className="relative z-10">
-          {/* Title bar: name + object-type label */}
-          <div className="flex items-center justify-between gap-2 px-1 pb-1.5 pt-0.5">
+          {/* Title bar: name only (full width — type label now sits in the art box) */}
+          <div className="px-1 pb-1.5 pt-0.5">
             <div className="truncate font-retro text-sm uppercase tracking-wide text-anymon-white drop-shadow-[0_1px_0_rgba(120,20,30,0.7)]">
               {a.name}
             </div>
-            <span className="type-badge shrink-0">{a.object}</span>
           </div>
 
           {/* Framed art window wrapping the 3D canvas (rectangular like real cards) */}
@@ -204,6 +251,11 @@ function AnymonCard({
                 className="h-full w-full"
               />
             </div>
+            {/* Object-type label, anchored bottom-right of the art box (keeps its
+                faded-red styling; frees up horizontal room for the name above). */}
+            <span className="type-badge absolute bottom-1.5 right-1.5 z-10 max-w-[70%] truncate">
+              {a.object}
+            </span>
             {a.status !== "ready" && (
               <div className="absolute left-1.5 bottom-1.5 rounded-gummy border border-anymon-edgeberry bg-anymon-berry px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-anymon-white">
                 incubating…
@@ -230,7 +282,7 @@ function AnymonCard({
               <button
                 onClick={heal}
                 disabled={busy}
-                className="retro-btn border-anymon-edgecoin bg-anymon-coin px-2 py-1 text-[10px] text-white shadow-[0_2px_0_0_#92400E]"
+                className="retro-btn border-anymon-edgecoin bg-anymon-coin px-2 py-1 text-[10px] text-white shadow-[0_2px_0_0_#854D0E]"
               >
                 {busy ? "…" : `heal ${cost}¢`}
               </button>
@@ -386,6 +438,13 @@ export default function DeckView({
 
       <div className="no-scrollbar relative z-10 h-full overflow-y-auto p-4 pb-24">
         <div className="mb-4">
+          {/* Sign-out: proper button, grey accents, pinned to the top-right. */}
+          <button
+            onClick={() => signOut()}
+            className="retro-btn absolute right-4 top-4 z-20 border-[#9CA3AF] bg-white px-3 py-1.5 text-xs text-anymon-ink/70 shadow-[0_2px_0_0_#6B7280]"
+          >
+            sign out
+          </button>
           <Image
             src="/logos/deck.png"
             alt="deck"
@@ -395,16 +454,9 @@ export default function DeckView({
             className="mx-auto mb-3 h-auto w-[55%] max-w-[180px] object-contain"
           />
           <div className="flex items-end justify-between">
-            <div>
-              <div className="preserve-case trainer-name">
-                {trainerName(player.name)}
-              </div>
-              <button
-                onClick={() => signOut()}
-                className="text-xs text-anymon-ink/40 underline-offset-2 hover:underline"
-              >
-                sign out
-              </button>
+            {/* extra top room now that sign-out no longer crowds the name */}
+            <div className="preserve-case trainer-name pt-2">
+              {trainerName(player.name)}
             </div>
             <div className="coins-counter px-4 py-2 text-right">
               <div className="font-retro text-lg text-anymon-coin">

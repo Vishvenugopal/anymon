@@ -1,0 +1,8 @@
+# Python TRELLIS GPU server — cannot run on Vercel (app uses Meshy instead).
+trellis_server/
+
+# Local-only dev/test helpers — not needed in the serverless build.
+scripts/
+
+# Misc
+*.log

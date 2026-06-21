@@ -10,7 +10,7 @@ import {
   movesUserPrompt,
 } from "./prompts";
 import { compressContext } from "./tokencompany";
-import type { Matchup, MatchupDir, Move, MoveKind } from "./types";
+import { clampRarity, type Matchup, type MatchupDir, type Move, type MoveKind } from "./types";
 
 function client(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -125,10 +125,14 @@ export function creativeName(object: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
-/** Claude Vision -> { object, creative name } in one call (falls back locally). */
+/**
+ * Claude Vision -> { object, creative name, commonness-based rarity } in one call.
+ * `rarity` is 1-5 where 1 = ubiquitous everyday object and 5 = genuinely rare.
+ * Falls back locally (object="creature", rarity=1) if Claude is unavailable.
+ */
 export async function identifyAndName(
   photoBase64OrDataUri: string,
-): Promise<{ object: string; name: string }> {
+): Promise<{ object: string; name: string; rarity: number }> {
   const { mimeType, data } = splitDataUri(photoBase64OrDataUri);
   try {
     const c = client();
@@ -161,16 +165,25 @@ export async function identifyAndName(
       .join("")
       .trim();
     const jsonStr = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
-    const parsed = JSON.parse(jsonStr) as { object?: string; name?: string };
+    const parsed = JSON.parse(jsonStr) as {
+      object?: string;
+      name?: string;
+      rarity?: number;
+    };
     const object = (parsed.object || "creature").toLowerCase().replace(/[^a-z ]/g, "").trim() || "creature";
     let name = (parsed.name || "").replace(/[^A-Za-z]/g, "").slice(0, 16);
     if (name.length < 3) name = creativeName(object);
     else name = name.charAt(0).toUpperCase() + name.slice(1);
-    return { object, name };
+    // Harsh commonness rarity: clamp to 1-5; default to 1 (common) if missing.
+    // No randomization — keep it deterministic so common things stay 1 star.
+    const rarity = Number.isFinite(Number(parsed.rarity))
+      ? clampRarity(Number(parsed.rarity))
+      : 1;
+    return { object, name, rarity };
   } catch (e) {
     console.warn("[claude] identifyAndName fell back:", (e as Error).message);
     const object = "creature";
-    return { object, name: creativeName(object) };
+    return { object, name: creativeName(object), rarity: 1 };
   }
 }
 

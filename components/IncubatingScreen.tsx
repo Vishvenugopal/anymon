@@ -47,13 +47,27 @@ export default function IncubatingScreen({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-anymon-ocean/90 to-anymon-lime/90 p-6 text-white"
+      className="absolute inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-[#FBF6F3] p-6 text-anymon-ink"
     >
-      <div className="mb-2 font-retro text-sm tracking-widest">
+      {/* Match the app's screens: cream base + a rising lime/green dot field. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[36%]"
+        style={{
+          backgroundImage: "radial-gradient(#8BE01E 1px, transparent 1.6px)",
+          backgroundSize: "6px 6px",
+          imageRendering: "pixelated",
+          WebkitMaskImage:
+            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 100%)",
+          maskImage:
+            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 100%)",
+        }}
+      />
+
+      <div className="relative z-10 mb-2 font-retro text-sm tracking-widest text-anymon-lime">
         {ready ? "hatched!" : "incubating..."}
       </div>
-      <div className="mb-1 text-2xl font-bold">{capture.name}</div>
-      <div className="preserve-case mb-6 text-sm opacity-80">
+      <div className="relative z-10 mb-1 text-2xl font-bold">{capture.name}</div>
+      <div className="preserve-case relative z-10 mb-6 text-sm text-anymon-ink/60">
         {trainerName(capture.ownerName)}
       </div>
 
@@ -61,7 +75,7 @@ export default function IncubatingScreen({
         key={ready ? "3d" : "2d"}
         initial={{ scale: 0.85, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="h-64 w-64 overflow-hidden rounded-gummy bg-white/95 shadow-gummy"
+        className="relative z-10 h-64 w-64 overflow-hidden rounded-gummy border-2 border-anymon-edgecloud bg-white shadow-gummy"
       >
         {ready && glbUrl ? (
           <AnymonCanvas
@@ -82,20 +96,20 @@ export default function IncubatingScreen({
         )}
       </motion.div>
 
-      <div className="mt-6 h-3 w-64 overflow-hidden rounded-full bg-white/30">
+      <div className="relative z-10 mt-6 h-3 w-64 overflow-hidden rounded-full border-2 border-anymon-edgecloud bg-anymon-cloud">
         <motion.div
-          className="h-full rounded-full bg-white"
+          className="h-full rounded-full bg-anymon-lime"
           animate={{ width: `${progress}%` }}
           transition={{ ease: "easeOut" }}
         />
       </div>
-      <div className="mt-2 text-xs opacity-80">
+      <div className="relative z-10 mt-2 text-xs text-anymon-ink/60">
         {ready ? "your 3d anymon is ready" : "sculpting a 3d model (1-2 min)"}
       </div>
 
       <button
         onClick={onClose}
-        className="gummy-btn mt-8 bg-white px-8 py-3 text-anymon-ink shadow-gummy-lime"
+        className="gummy-btn relative z-10 mt-8 border-2 border-anymon-edgelime bg-anymon-lime px-8 py-3 text-anymon-ink shadow-gummy-lime"
       >
         {ready ? "add to deck" : "keep scanning"}
       </button>

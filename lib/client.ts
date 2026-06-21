@@ -147,9 +147,15 @@ export async function apiCapture(body: {
   return res.json();
 }
 
-export async function apiCaptureStatus(
-  id: string,
-): Promise<{ status: string; glbUrl: string | null; progress: number }> {
+export async function apiCaptureStatus(id: string): Promise<{
+  status: string;
+  glbUrl: string | null;
+  progress: number;
+  // `done` is true for ANY terminal state (ready OR failed) — use it to leave the
+  // incubating screen. `spriteDataUri` is the 2D fallback to show when there's no glb.
+  done?: boolean;
+  spriteDataUri?: string;
+}> {
   const res = await fetch(`/api/capture/status?id=${encodeURIComponent(id)}`);
   return res.json();
 }

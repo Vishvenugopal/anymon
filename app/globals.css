@@ -112,17 +112,19 @@ textarea {
   background-image: radial-gradient(#e24040 1px, transparent 1.6px);
   background-size: 6px 6px;
   image-rendering: pixelated;
+  /* Fade out earlier: only a thin solid hold at the very bottom, then ramp to
+     fully transparent by ~62% so the lower portion stays clear/readable. */
   -webkit-mask-image: linear-gradient(
     to top,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 12%,
-    rgba(0, 0, 0, 0) 100%
+    rgba(0, 0, 0, 0.45) 5%,
+    rgba(0, 0, 0, 0) 62%
   );
   mask-image: linear-gradient(
     to top,
     rgba(0, 0, 0, 1) 0%,
-    rgba(0, 0, 0, 1) 12%,
-    rgba(0, 0, 0, 0) 100%
+    rgba(0, 0, 0, 0.45) 5%,
+    rgba(0, 0, 0, 0) 62%
   );
 }
 
@@ -275,17 +277,17 @@ textarea {
   font-family: "Doto", ui-monospace, monospace;
   font-weight: 900;
   font-size: 1.4rem;
-  color: #d97706; /* coin amber */
-  text-shadow: 0 1px 0 #92400e; /* y-only darker amber, never black */
+  color: #eab308; /* coin golden yellow */
+  text-shadow: 0 1px 0 #854d0e; /* y-only darker golden, never black */
   pointer-events: none;
 }
 
 /* ---- Coins counter panel: border tinted to match the coin text color ---- */
 .coins-counter {
   border-radius: 1rem;
-  border: 2px solid #b45309; /* edgecoin (amber-700) ~ coin text */
+  border: 2px solid #a16207; /* edgecoin (golden) ~ coin text */
   background: #ffffff;
-  box-shadow: 0 3px 0 0 #92400e; /* y-only darker amber, never black */
+  box-shadow: 0 3px 0 0 #854d0e; /* y-only darker golden, never black */
 }
 
 /* ---- Captured-ghost alert item ---- */

@@ -15,10 +15,20 @@ export async function GET(req: Request) {
 
   const result = await resolveGlb(anymon);
 
-  // Persist once the model is ready so we don't poll Meshy forever.
+  // Persist terminal states so we stop polling the provider AND so the stored
+  // Anymon reflects reality (ready with its glb, or failed). Persisting "failed"
+  // is what guarantees the next poll short-circuits and the UI stops incubating.
   if (result.status === "ready" && result.glbUrl && anymon.status !== "ready") {
     await store.updateAnymon(id, { status: "ready", glbUrl: result.glbUrl });
+  } else if (result.status === "failed" && anymon.status !== "failed") {
+    await store.updateAnymon(id, { status: "failed" });
   }
 
-  return NextResponse.json(result);
+  // Always return the 2D sprite + a terminal flag so the client can leave the
+  // "incubating" screen even when there's no 3D model (failed / fallback).
+  return NextResponse.json({
+    ...result,
+    done: result.status === "ready" || result.status === "failed",
+    spriteDataUri: anymon.spriteDataUri,
+  });
 }
