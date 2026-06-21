@@ -58,6 +58,7 @@ export default function AnymonCanvas({
   thumbUrl,
   className = "",
   active = true,
+  fit = "contain",
 }: {
   glbUrl: string | null;
   spriteFallback?: string;
@@ -66,6 +67,9 @@ export default function AnymonCanvas({
   // 3D model — not the stylized sprite.
   thumbUrl?: string | null;
   className?: string;
+  // How the still/fallback image fits its box: "cover" fills the frame (cropping
+  // overflow) while keeping aspect ratio; "contain" letterboxes it.
+  fit?: "contain" | "cover";
   // When false, show the still image instead of a live WebGL canvas. Each
   // <Canvas> is its own WebGL context, and mobile browsers (esp. iOS Safari) cap
   // simultaneous contexts at ~8 — exceeding it silently drops contexts so models
@@ -76,7 +80,11 @@ export default function AnymonCanvas({
   const stillSrc = thumbUrl || spriteFallback;
   const fallback = stillSrc ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={stillSrc} alt="anymon" className="h-full w-full object-contain" />
+    <img
+      src={stillSrc}
+      alt="anymon"
+      className={`h-full w-full ${fit === "cover" ? "object-cover" : "object-contain"}`}
+    />
   ) : (
     <div className="flex h-full w-full items-center justify-center text-5xl">
       ✨

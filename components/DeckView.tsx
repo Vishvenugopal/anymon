@@ -466,6 +466,7 @@ function AnymonCard({
                 spriteFallback={a.spriteDataUri}
                 thumbUrl={a.thumbUrl}
                 active={active3d}
+                fit="cover"
                 className="h-full w-full"
               />
             </div>
@@ -481,11 +482,6 @@ function AnymonCard({
             {a.status !== "ready" && (
               <div className="absolute left-1.5 bottom-1.5 rounded-gummy border border-anymon-edgeberry bg-anymon-berry px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-anymon-white">
                 incubating…
-              </div>
-            )}
-            {a.status === "ready" && a.glbUrl && !active3d && (
-              <div className="pointer-events-none absolute left-1.5 bottom-1.5 rounded-gummy border border-anymon-edgeocean bg-anymon-ocean/90 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-anymon-white">
-                tap · 3d
               </div>
             )}
           </div>

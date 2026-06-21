@@ -69,7 +69,7 @@ export default function SignIn() {
 
       <div className="no-scrollbar relative z-10 flex flex-1 flex-col items-center justify-center overflow-y-auto px-8 pb-10">
         <h1 className="preserve-case text-center text-2xl font-bold text-anymon-ink">
-          Turn any object into an Anymon!
+          Turn anything into an Anymon!
         </h1>
         <p className="preserve-case mt-2 text-center text-sm text-anymon-ink/60">
           Learn science while creating and fighting anymon!

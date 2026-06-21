@@ -412,9 +412,26 @@ class RedisStore implements Store {
 // ---------------- Singleton selection ----------------
 let store: Store | null = null;
 
+// Resolve a TCP Redis connection string from the usual env var names. The Vercel
+// Upstash integration may inject the connection URL as KV_URL instead of
+// REDIS_URL, and ALSO injects HTTPS "REST" URLs (KV_REST_API_URL /
+// UPSTASH_REDIS_REST_URL) that ioredis can't use — so we accept only redis:// or
+// rediss:// schemes and ignore the rest.
+function resolveRedisUrl(): string | undefined {
+  const candidates = [
+    process.env.REDIS_URL,
+    process.env.KV_URL,
+    process.env.UPSTASH_REDIS_URL,
+  ];
+  for (const c of candidates) {
+    if (c && /^rediss?:\/\//i.test(c)) return c;
+  }
+  return undefined;
+}
+
 export function getStore(): Store {
   if (store) return store;
-  const url = process.env.REDIS_URL;
+  const url = resolveRedisUrl();
   if (url) {
     // Lazy require so the in-memory path never needs ioredis at runtime.
     const IORedis = require("ioredis") as typeof import("ioredis").default;

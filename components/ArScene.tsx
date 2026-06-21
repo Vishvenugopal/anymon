@@ -330,14 +330,11 @@ function WildEntity({
 // ---- a nearby trainer rendered as the shared Player.fbx ----
 function TrainerModel() {
   const fbx = useFBX("/models/Player.fbx");
-  const cloned = useMemo(() => {
-    const c = fbx.clone(true);
-    c.traverse((o) => {
-      const mesh = o as THREE.Mesh;
-      if (mesh.isMesh) mesh.castShadow = true;
-    });
-    return c;
-  }, [fbx]);
+  // NOTE: do NOT enable castShadow here. The trainer is a SKINNED (animated)
+  // mesh, and rendering a skinned mesh into the shadow map compiles a skinning
+  // depth shader that crashes the WebGL context on some mobile GPUs — which made
+  // EVERY model in the scene render white the moment another player appeared.
+  const cloned = useMemo(() => fbx.clone(true), [fbx]);
   const ref = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(cloned.animations ?? [], ref);
   // Trainers are human avatars, not Anymon — render them clearly TALLER than the
