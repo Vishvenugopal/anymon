@@ -5,19 +5,20 @@ import { NEARBY_RADIUS_M, rarityMaxHp, type Anymon } from "@/lib/types";
 export const runtime = "nodejs";
 
 // Bump when the seed set changes so old placeholders are cleaned up + replaced.
-const SEED_VERSION = "v3";
+const SEED_VERSION = "v4";
 
 // Real pre-generated starter Anymon: each `asset` has a matching sprite + 3D
 // model under /public/seeds (built FROM that object via Gemini + Meshy, see
 // scripts/gen-seeds.mjs), so name ↔ object ↔ model all agree and they read as
 // genuine Anymon instead of random sample models with mismatched names.
 // Commonness-based rarity stays harsh (everyday objects = 1 star).
-// Clustered in a frontal arc (bearings within ~70°) + staggered distance so they
-// spawn together in front of the player instead of surrounding them.
+// Spread AROUND the player (bearings cover front, side and behind) with staggered
+// distance, so the world feels populated 360° and you turn to find them.
 const SEEDS = [
-  { asset: "book", object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA", rarity: 1, bearing: -30, dist: 24 },
-  { asset: "mug", object: "mug", name: "Muglet", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 1, bearing: 8, dist: 33 },
-  { asset: "telescope", object: "telescope", name: "Scopestar", owner: "orbit-1a2b", city: "Reykjavik", country: "Iceland", rarity: 5, bearing: 36, dist: 26 },
+  { asset: "umbrella", object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK", rarity: 2, bearing: -35, dist: 22 },
+  { asset: "mug", object: "mug", name: "Muglet", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 1, bearing: 30, dist: 30 },
+  { asset: "telescope", object: "telescope", name: "Scopestar", owner: "orbit-1a2b", city: "Reykjavik", country: "Iceland", rarity: 5, bearing: 95, dist: 26 },
+  { asset: "lamp", object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France", rarity: 1, bearing: 180, dist: 28 },
 ];
 
 function offset(lat: number, lng: number, meters: number, bearingDeg: number) {
