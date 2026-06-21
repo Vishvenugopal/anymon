@@ -6,12 +6,13 @@ Anymon is an AR mobile game similar to Pokemon Go where players can "capture" an
 
 Players will also have to choose their moves carefully in this game: when I was playtesting, I had a lot of fun deciding which moves will be most effective against other anymon, especially when they are both unique objects! The gameplay also borrows a lot of the gameplay loop and fun systems from the original Pokemon games, so it's actually a very engaging experience.
 
-**Other important gameplay features:**
+## **Other important gameplay features:**
 
-Anymon can be released into the wild to passively fight other anymon in the background. However, other nearby players can capture those anymon if they defeat it in a battle.
-More rare and unique real-life objects will create stronger anymon. This encourages players to go out, explore the world, and be curious!
-There's a fully functioning in-game economy to keep the game balanced. When your anymon takes damage, you will have to spend coins to heal it. You can gain coins by defeating other anymon.
-Inspiration
+- Anymon can be released into the wild to passively fight other anymon in the background. However, other nearby players can capture those anymon if they defeat it in a battle.
+- More rare and unique real-life objects will create stronger anymon. This encourages players to go out, explore the world, and be curious!
+- There's a fully functioning in-game economy to keep the game balanced. When your anymon takes damage, you will have to spend coins to heal it. You can gain coins by defeating other anymon.
+
+# Inspiration
 AI has been gaining stigma of ruining creativity, imagination, and learning. I wanted to make something that improves all 3, especially for kids. I also wanted to develop a game that was fun for myself to play, and that actually came out to be true, as I found myself enjoying this a lot!
 
 # Challenges I ran into
@@ -22,5 +23,9 @@ I designed the visuals, style, UX, gameplay, etc. and I'm happy with it.
 
 # Notes
 Phone with browser is recommended for demo app
+
 Reach out for questions: vishv@uw.edu
+
+# Setup
+Coming soon
 
