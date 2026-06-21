@@ -57,6 +57,7 @@ export async function createImageTo3D(image: string): Promise<string> {
 export interface MeshyStatus {
   status: "PENDING" | "IN_PROGRESS" | "SUCCEEDED" | "FAILED" | "CANCELED";
   glbUrl: string | null;
+  thumbUrl: string | null;
   progress: number;
 }
 
@@ -78,10 +79,14 @@ export async function getImageTo3D(taskId: string): Promise<MeshyStatus> {
     status: MeshyStatus["status"];
     progress?: number;
     model_urls?: { glb?: string };
+    thumbnail_url?: string;
   };
   return {
     status: data.status,
     progress: data.progress ?? 0,
     glbUrl: data.model_urls?.glb ? proxiedGlb(data.model_urls.glb) : null,
+    // The thumbnail is shown via a plain <img>, which loads cross-origin without
+    // CORS, so it needs no proxy.
+    thumbUrl: data.thumbnail_url || null,
   };
 }

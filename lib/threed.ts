@@ -23,6 +23,7 @@ export function is3DMock(): boolean {
 export interface ThreeDStatus {
   status: "PENDING" | "IN_PROGRESS" | "SUCCEEDED" | "FAILED" | "CANCELED";
   glbUrl: string | null;
+  thumbUrl?: string | null;
   progress: number;
 }
 
@@ -42,7 +43,12 @@ export async function get3D(taskId: string): Promise<ThreeDStatus> {
   switch (provider()) {
     case "meshy": {
       const s = await meshyGet(taskId);
-      return { status: s.status, glbUrl: s.glbUrl, progress: s.progress };
+      return {
+        status: s.status,
+        glbUrl: s.glbUrl,
+        thumbUrl: s.thumbUrl,
+        progress: s.progress,
+      };
     }
     case "trellis":
       return trellisGet(taskId);

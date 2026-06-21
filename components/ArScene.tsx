@@ -52,6 +52,11 @@ const degToRad = (d: number) => (d * Math.PI) / 180;
 // Flip this if blips land on the wrong side on a real phone.
 const LATERAL_SIGN = 1;
 
+// The virtual ground sits this far below the camera's eye level (≈3 ft). The
+// shadow-catcher and trainers rest on it; wild Anymon hover a bit above it. Make
+// it MORE negative to drop the floor further; tune the Anymon `lift` separately.
+const FLOOR_Y = -0.9;
+
 /** Bearing+distance -> world (x,z) on the floor. North = -z, East = +x. */
 function placeXZ(bearingDeg: number, distM: number): [number, number] {
   const r = 2.6 + (clamp(distM, 0, NEARBY_RADIUS_M) / NEARBY_RADIUS_M) * 6.4;
@@ -98,7 +103,7 @@ function depthCues(distM: number) {
   return {
     height: THREE.MathUtils.lerp(1.8, 0.55, t), // noticeable scale range
     opacity: 1, // models/sprites stay fully opaque (distance read via size+lift)
-    lift: THREE.MathUtils.lerp(0.7, 1.3, t), // float a touch off the floor; far = higher
+    lift: THREE.MathUtils.lerp(0.4, 1.0, t), // ~1 ft lower than before; hovers over FLOOR_Y
   };
 }
 
@@ -355,7 +360,7 @@ function TrainerModel() {
         scale={scale}
         position={[
           -center.x * scale,
-          -center.y * scale + TRAINER_HEIGHT / 2,
+          -center.y * scale + TRAINER_HEIGHT / 2 + FLOOR_Y, // feet on the floor
           -center.z * scale,
         ]}
       >
@@ -367,7 +372,7 @@ function TrainerModel() {
 
 function TrainerFallback() {
   return (
-    <mesh position={[0, 1.3, 0]}>
+    <mesh position={[0, FLOOR_Y + 1.3, 0]}>
       <capsuleGeometry args={[0.5, 1.6, 4, 8]} />
       <meshStandardMaterial color="#3FB0D6" />
     </mesh>
@@ -397,7 +402,7 @@ function TrainerEntity({
       </Suspense>
       {showOverlays && (
         <Html
-          position={[0, 2.9, 0]}
+          position={[0, FLOOR_Y + 2.9, 0]}
           center
           distanceFactor={9}
           occlude={false}
@@ -606,7 +611,7 @@ export default function ArScene({
 
         {/* Transparent ground that only darkens where Anymon cast a shadow, so a
             soft contact shadow lands on the real floor over the camera feed. */}
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
           <planeGeometry args={[80, 80]} />
           <shadowMaterial transparent opacity={0.32} color="#04222a" />
         </mesh>

@@ -19,7 +19,11 @@ export async function GET(req: Request) {
   // Anymon reflects reality (ready with its glb, or failed). Persisting "failed"
   // is what guarantees the next poll short-circuits and the UI stops incubating.
   if (result.status === "ready" && result.glbUrl && anymon.status !== "ready") {
-    await store.updateAnymon(id, { status: "ready", glbUrl: result.glbUrl });
+    await store.updateAnymon(id, {
+      status: "ready",
+      glbUrl: result.glbUrl,
+      thumbUrl: result.thumbUrl ?? null,
+    });
   } else if (result.status === "failed" && anymon.status !== "failed") {
     await store.updateAnymon(id, { status: "failed" });
   }

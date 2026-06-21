@@ -167,9 +167,14 @@ const MAX_INCUBATE_MS = 6 * 60_000;
 /** Resolves the 3D model status for an Anymon (mock = timed, real = provider). */
 export async function resolveGlb(
   a: Anymon,
-): Promise<{ status: Anymon["status"]; glbUrl: string | null; progress: number }> {
+): Promise<{
+  status: Anymon["status"];
+  glbUrl: string | null;
+  thumbUrl?: string | null;
+  progress: number;
+}> {
   if (a.status === "ready" && a.glbUrl) {
-    return { status: "ready", glbUrl: a.glbUrl, progress: 100 };
+    return { status: "ready", glbUrl: a.glbUrl, thumbUrl: a.thumbUrl ?? null, progress: 100 };
   }
 
   // A real provider genuinely could not produce a model. Surface it as failed
@@ -220,7 +225,12 @@ export async function resolveGlb(
   try {
     const task = await get3D(a.meshyTaskId);
     if (task.status === "SUCCEEDED" && task.glbUrl) {
-      return { status: "ready", glbUrl: task.glbUrl, progress: 100 };
+      return {
+        status: "ready",
+        glbUrl: task.glbUrl,
+        thumbUrl: task.thumbUrl ?? null,
+        progress: 100,
+      };
     }
     if (task.status === "FAILED" || task.status === "CANCELED") {
       // A real provider genuinely failed. Surface it as failed rather than

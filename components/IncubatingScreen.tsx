@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import AnymonCanvas from "./AnymonCanvas";
 import { apiCaptureStatus, type CaptureResult } from "@/lib/client";
+import { playSfx } from "@/lib/audio";
 
 export default function IncubatingScreen({
   capture,
@@ -30,6 +31,7 @@ export default function IncubatingScreen({
           setGlbUrl(s.glbUrl);
           setProgress(100);
           setReady(true);
+          playSfx("success");
           if (timer.current) clearInterval(timer.current);
         } else if (s.status === "failed" || s.done) {
           // Terminal failure (or watchdog timeout): stop polling so we never

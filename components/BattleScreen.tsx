@@ -13,6 +13,7 @@ import {
   type Move,
 } from "@/lib/client";
 import type { MoveKind } from "@/lib/types";
+import { playMusic, playSfx } from "@/lib/audio";
 
 // Pokedex-style move tile: edge-colored outline + a y-only (x=0) shadow that is a
 // DARKER shade of that same edge color (never black), matching the rest of the app.
@@ -284,9 +285,16 @@ export default function BattleScreen({
     skipRef.current?.();
   }, []);
 
+  // Battle music while this screen is open; restore ambient on exit.
+  useEffect(() => {
+    playMusic("battle");
+    return () => playMusic("ambient");
+  }, []);
+
   const finish = useCallback(
     async (winnerId: string) => {
       endedRef.current = true;
+      playSfx(winnerId === attacker.id ? "victory" : "defeat");
       setPhase("resolving");
       setLog(
         winnerId === attacker.id
@@ -347,6 +355,7 @@ export default function BattleScreen({
         return;
       }
 
+      playSfx("hit");
       if (isPlayer) {
         setD(Math.max(0, dHpRef.current - r.dmg));
         setEnemyHit(true);

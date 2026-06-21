@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useSession } from "next-auth/react";
 import ScannerView from "@/components/ScannerView";
 import DeckView from "@/components/DeckView";
+import { unlockAudio, playSfx } from "@/lib/audio";
 import BottomNav, { type Tab } from "@/components/BottomNav";
 import SignIn from "@/components/SignIn";
 import UsernameSetup from "@/components/UsernameSetup";
@@ -117,6 +118,23 @@ export default function Home() {
     const id = setInterval(refresh, 8000);
     return () => clearInterval(id);
   }, [player, refresh]);
+
+  // Audio: unlock on the first user gesture (autoplay policy), then play a short
+  // click sound whenever any button is pressed. Background music is driven by the
+  // screens themselves (ambient by default; battle screens switch to battle).
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener("pointerdown", unlock, { once: true });
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("button")) playSfx("click");
+    };
+    window.addEventListener("click", onClick);
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("click", onClick);
+    };
+  }, []);
 
   // ---- Gating (all wrapped in the same phone-width frame as the app) ----
   if (status === "loading" || me === null) {

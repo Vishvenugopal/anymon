@@ -21,6 +21,7 @@ import {
   type Position,
 } from "@/lib/client";
 import { NEARBY_RADIUS_M } from "@/lib/types";
+import { playSfx } from "@/lib/audio";
 
 type NearbyAnymon = Anymon & { distM: number; mine: boolean };
 
@@ -140,6 +141,7 @@ export default function ScannerView({
     setBusy(true);
     try {
       const result = await apiCapture({ imageBase64: shot, pos, place });
+      playSfx("capture");
       setCapture(result);
     } catch (e) {
       setError((e as Error).message);

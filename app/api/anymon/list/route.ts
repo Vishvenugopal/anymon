@@ -25,7 +25,11 @@ export async function GET() {
         const r = await resolveGlb(a);
         if (r.status === "ready" && r.glbUrl) {
           return (
-            (await store.updateAnymon(a.id, { status: "ready", glbUrl: r.glbUrl })) ?? a
+            (await store.updateAnymon(a.id, {
+              status: "ready",
+              glbUrl: r.glbUrl,
+              thumbUrl: r.thumbUrl ?? null,
+            })) ?? a
           );
         }
         if (r.status === "failed") {

@@ -55,26 +55,28 @@ class GlbErrorBoundary extends Component<
 export default function AnymonCanvas({
   glbUrl,
   spriteFallback,
+  thumbUrl,
   className = "",
   active = true,
 }: {
   glbUrl: string | null;
   spriteFallback?: string;
+  // A rendered still of the 3D model (Meshy thumbnail). Preferred over the 2D
+  // sprite as the resting/fallback image so an idle card still shows the actual
+  // 3D model — not the stylized sprite.
+  thumbUrl?: string | null;
   className?: string;
-  // When false, show the static 2D sprite instead of a live WebGL canvas. Each
+  // When false, show the still image instead of a live WebGL canvas. Each
   // <Canvas> is its own WebGL context, and mobile browsers (esp. iOS Safari) cap
   // simultaneous contexts at ~8 — exceeding it silently drops contexts so models
   // render WHITE. Callers that show many models at once (the deck grid) keep
-  // most cards idle and only set active on the focused/hovered one.
+  // most cards idle (showing the 3D thumbnail) and only go live on focus.
   active?: boolean;
 }) {
-  const fallback = spriteFallback ? (
+  const stillSrc = thumbUrl || spriteFallback;
+  const fallback = stillSrc ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={spriteFallback}
-      alt="anymon"
-      className="h-full w-full object-contain"
-    />
+    <img src={stillSrc} alt="anymon" className="h-full w-full object-contain" />
   ) : (
     <div className="flex h-full w-full items-center justify-center text-5xl">
       ✨

@@ -78,6 +78,7 @@ export interface Anymon {
   ownerName: string;
   spriteDataUri: string; // 2D art (data: URI) shown instantly
   glbUrl: string | null; // 3D model from Meshy (null while incubating)
+  thumbUrl?: string | null; // Meshy's rendered preview image of the 3D model
   meshyTaskId: string | null;
   status: IncubationStatus;
   city: string;

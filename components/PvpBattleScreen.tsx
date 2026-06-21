@@ -12,6 +12,7 @@ import {
   type BattleRoom,
 } from "@/lib/client";
 import type { BattleFighter, Matchup, MoveKind } from "@/lib/types";
+import { playMusic } from "@/lib/audio";
 
 const POLL_MS = 1000;
 
@@ -209,6 +210,12 @@ export default function PvpBattleScreen({
   // AR (live camera) vs a neutral solid background.
   const [arOn, setArOn] = useState(true);
   const alive = useRef(true);
+
+  // Battle music while the PvP screen is open; restore ambient on exit.
+  useEffect(() => {
+    playMusic("battle");
+    return () => playMusic("ambient");
+  }, []);
 
   // Poll the shared room until it ends.
   useEffect(() => {

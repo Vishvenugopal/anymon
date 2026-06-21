@@ -2,7 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  AnimatePresence,
+  motion,
+  useMotionValue,
+  useSpring,
+  type MotionValue,
+} from "framer-motion";
 import { signOut } from "next-auth/react";
 import AnymonCanvas from "./AnymonCanvas";
 import {
@@ -40,45 +46,36 @@ function requestOrientationPermission() {
  * neutral orientation to wherever the phone is the moment it engages, so tilting
  * from that rest pose rocks the card. Returns null on desktop (no sensor events).
  */
-function useDeviceTilt(enabled: boolean): { rx: number; ry: number } | null {
-  const [tilt, setTilt] = useState<{ rx: number; ry: number } | null>(null);
+function useDeviceTilt(
+  enabled: boolean,
+  rotX: MotionValue<number>,
+  rotY: MotionValue<number>,
+  cardScale: MotionValue<number>,
+) {
   const restRef = useRef<{ beta: number; gamma: number } | null>(null);
-  const smoothRef = useRef<{ rx: number; ry: number }>({ rx: 0, ry: 0 });
-  const lastRef = useRef<{ rx: number; ry: number }>({ rx: 0, ry: 0 });
 
   useEffect(() => {
     if (!enabled) {
-      setTilt(null);
       restRef.current = null;
-      smoothRef.current = { rx: 0, ry: 0 };
-      lastRef.current = { rx: 0, ry: 0 };
       return;
     }
     const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
     const onOrient = (e: DeviceOrientationEvent) => {
       if (e.beta == null || e.gamma == null) return;
       if (!restRef.current) restRef.current = { beta: e.beta, gamma: e.gamma };
-      const rawX = clamp((e.beta - restRef.current.beta) * 0.6, 16); // toward/away
-      const rawY = clamp((e.gamma - restRef.current.gamma) * 0.6, 16); // left/right
-      // The accelerometer is noisy; feeding raw values straight to the spring
-      // makes the card jitter. Low-pass filter, then only re-render when it
-      // actually moved >0.4° (kills the sub-degree churn that caused jitter).
-      const sm = smoothRef.current;
-      sm.rx += (rawX - sm.rx) * 0.12;
-      sm.ry += (rawY - sm.ry) * 0.12;
-      if (
-        Math.abs(sm.rx - lastRef.current.rx) > 0.4 ||
-        Math.abs(sm.ry - lastRef.current.ry) > 0.4
-      ) {
-        lastRef.current = { rx: sm.rx, ry: sm.ry };
-        setTilt({ rx: Math.round(sm.rx * 10) / 10, ry: Math.round(sm.ry * 10) / 10 });
-      }
+      // Write straight to the motion values — NO React state. The card is driven
+      // by useSpring(), which smooths the noisy/sparse sensor stream on the
+      // compositor, so it follows fluidly instead of jittering each render.
+      rotX.set(clamp((e.beta - restRef.current.beta) * 0.6, 16)); // toward/away
+      rotY.set(clamp((e.gamma - restRef.current.gamma) * 0.6, 16)); // left/right
+      cardScale.set(1.05);
     };
     window.addEventListener("deviceorientation", onOrient, true);
-    return () => window.removeEventListener("deviceorientation", onOrient, true);
-  }, [enabled]);
-
-  return tilt;
+    return () => {
+      window.removeEventListener("deviceorientation", onOrient, true);
+      restRef.current = null;
+    };
+  }, [enabled, rotX, rotY, cardScale]);
 }
 
 function TrashIcon() {
@@ -285,6 +282,7 @@ function AnymonCard({
   const [err, setErr] = useState<string | null>(null);
   const [coinFx, setCoinFx] = useState<number | null>(null);
   const ackedRef = useRef(false);
+  const fxTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   // Live 3D (a WebGL context) is mounted ONLY for the focused card. Showing all
   // ~10 deck/wild canvases at once exhausts the browser's WebGL context limit
@@ -294,43 +292,43 @@ function AnymonCard({
   const [pinned, setPinned] = useState(false);
   const downRef = useRef<{ x: number; y: number } | null>(null);
 
-  // Touch devices have no :hover, so the tilt/lift/shine can't be seen. We
-  // reproduce the hover transform from a press-and-drag gesture: while a finger
-  // (or pen) is dragging on a non-button part of the card, map its position to
-  // the same rotateX/rotateY/scale that `whileHover` uses on desktop.
-  const [dragTilt, setDragTilt] = useState<{
-    rotateX: number;
-    rotateY: number;
-    scale: number;
-  } | null>(null);
+  // Card transform is driven by motion values + springs (NOT React state), so the
+  // gyroscope/drag streams stay on the compositor and never cause render jitter.
+  const rotX = useMotionValue(0);
+  const rotY = useMotionValue(0);
+  const cardScale = useMotionValue(1);
+  const sRotX = useSpring(rotX, { stiffness: 150, damping: 18, mass: 0.4 });
+  const sRotY = useSpring(rotY, { stiffness: 150, damping: 18, mass: 0.4 });
+  const sScale = useSpring(cardScale, { stiffness: 200, damping: 22 });
+
+  // True while a finger is actively dragging across the card (touch tilt).
+  const [dragging, setDragging] = useState(false);
 
   const tiltFromPoint = (clientX: number, clientY: number) => {
     const rect = cardRef.current?.getBoundingClientRect();
     if (!rect) return;
     const px = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     const py = Math.min(1, Math.max(0, (clientY - rect.top) / rect.height));
-    // center => no tilt; edges => up to ~7deg (matches the whileHover values).
-    setDragTilt({
-      rotateX: (0.5 - py) * 14,
-      rotateY: (px - 0.5) * 14,
-      scale: 1.05,
-    });
+    rotX.set((0.5 - py) * 14);
+    rotY.set((px - 0.5) * 14);
+    cardScale.set(1.05);
   };
 
-  // Mouse already gets real :hover; only drive this for touch/pen. Skip when the
-  // press starts on a button so taps (deploy/heal/recall) keep working normally.
+  // Mouse already gets real :hover; only drive drag-tilt for touch/pen. Skip when
+  // the press starts on a button so taps (deploy/heal/recall/delete) still work.
   const onCardPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse") return;
     if ((e.target as HTMLElement).closest("button")) return;
     downRef.current = { x: e.clientX, y: e.clientY };
+    setDragging(true);
     tiltFromPoint(e.clientX, e.clientY);
   };
   const onCardPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "mouse" || !dragTilt) return;
+    if (e.pointerType === "mouse" || !dragging) return;
     tiltFromPoint(e.clientX, e.clientY);
   };
-  // On touch/pen, a tap (negligible movement) toggles a "pinned" 3D view so the
-  // model keeps spinning after the finger lifts; a real drag just tilts the card.
+  // On touch/pen, a tap (negligible movement) toggles a "pinned" focus so the 3D
+  // keeps spinning + the gyro keeps tilting after the finger lifts.
   const onCardPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType !== "mouse" && downRef.current) {
       const dx = e.clientX - downRef.current.x;
@@ -347,26 +345,52 @@ function AnymonCard({
         });
     }
     downRef.current = null;
-    setDragTilt(null);
+    setDragging(false);
   };
-  const clearTilt = () => setDragTilt(null);
-  const active3d = hovered || pinned || dragTilt !== null;
-  // While focused on a phone, rock the card with the gyroscope (null elsewhere).
-  const deviceTilt = useDeviceTilt(active3d);
+  const clearTilt = () => setDragging(false);
+  const active3d = hovered || pinned || dragging;
+
+  // Gyroscope tilt while focused (writes the motion values; no-op on desktop).
+  useDeviceTilt(active3d, rotX, rotY, cardScale);
+
+  // Settle to the resting pose (or desktop hover pose) whenever the card isn't
+  // being actively tilted by a drag or the gyroscope.
+  useEffect(() => {
+    if (dragging || pinned) return; // pointer / device drives it while focused
+    if (hovered) {
+      rotX.set(7);
+      rotY.set(-7);
+      cardScale.set(1.05);
+    } else {
+      rotX.set(0);
+      rotY.set(0);
+      cardScale.set(1);
+    }
+  }, [hovered, pinned, dragging, rotX, rotY, cardScale]);
 
   const hurt = a.hp < a.maxHp;
   const cost = healCost(a);
 
   // "+XX$" reward effect: rises off the card, fades, then clears the tally.
+  // The hide timer lives in a ref (NOT the effect's cleanup): acknowledging drops
+  // pendingCoins to 0, which re-runs this effect — a cleanup-based timer would be
+  // cancelled there and the "+$" would never fade. Cleared only on unmount.
   useEffect(() => {
     if (a.pendingCoins > 0 && !ackedRef.current) {
       ackedRef.current = true;
       setCoinFx(a.pendingCoins);
       apiAcknowledge(a.id).then(() => onChanged());
-      const t = setTimeout(() => setCoinFx(null), 1600);
-      return () => clearTimeout(t);
+      if (fxTimerRef.current) clearTimeout(fxTimerRef.current);
+      fxTimerRef.current = setTimeout(() => setCoinFx(null), 1600);
     }
   }, [a.id, a.pendingCoins, onChanged]);
+
+  useEffect(
+    () => () => {
+      if (fxTimerRef.current) clearTimeout(fxTimerRef.current);
+    },
+    [],
+  );
 
   const recall = async () => {
     setBusy(true);
@@ -393,22 +417,14 @@ function AnymonCard({
     <div className="relative">
       <motion.div
         ref={cardRef}
-        layout
-        whileHover={{ rotateX: 7, rotateY: -7, scale: 1.05, zIndex: 30 }}
-        animate={
-          dragTilt
-            ? { ...dragTilt, zIndex: 30 }
-            : deviceTilt
-              ? {
-                  rotateX: deviceTilt.rx,
-                  rotateY: deviceTilt.ry,
-                  scale: 1.05,
-                  zIndex: 30,
-                }
-              : { rotateX: 0, rotateY: 0, scale: 1 }
-        }
-        transition={{ type: "spring", stiffness: 240, damping: 18 }}
-        style={{ transformPerspective: 720, rotateZ: tilt }}
+        style={{
+          transformPerspective: 720,
+          rotateZ: tilt,
+          rotateX: sRotX,
+          rotateY: sRotY,
+          scale: sScale,
+          zIndex: active3d ? 30 : undefined,
+        }}
         onPointerDown={onCardPointerDown}
         onPointerMove={onCardPointerMove}
         onPointerUp={onCardPointerUp}
@@ -448,6 +464,7 @@ function AnymonCard({
               <AnymonCanvas
                 glbUrl={a.status === "ready" ? a.glbUrl : null}
                 spriteFallback={a.spriteDataUri}
+                thumbUrl={a.thumbUrl}
                 active={active3d}
                 className="h-full w-full"
               />
