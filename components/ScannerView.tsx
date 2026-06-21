@@ -1,16 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Webcam from "react-webcam";
 import { motion, AnimatePresence } from "framer-motion";
 import IncubatingScreen from "./IncubatingScreen";
 import BattleScreen from "./BattleScreen";
+import ArScene, { type ArTrainer, type ArWild } from "./ArScene";
+import PvpBattleScreen from "./PvpBattleScreen";
 import {
   apiBattleStart,
   apiCapture,
+  apiPvpChallenge,
   type Anymon,
   type Combatant,
   type CaptureResult,
+  type Matchup,
+  type NearbyTrainer,
+  type Player,
   type Position,
 } from "@/lib/client";
 import { NEARBY_RADIUS_M } from "@/lib/types";
@@ -19,7 +26,6 @@ type NearbyAnymon = Anymon & { distM: number; mine: boolean };
 
 // ---- geo + compass helpers ----
 const toRad = (d: number) => (d * Math.PI) / 180;
-const wrap180 = (d: number) => (((d + 180) % 360) + 360) % 360 - 180;
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
 function bearingDeg(from: Position, to: { lat: number; lng: number }): number {
@@ -68,20 +74,26 @@ function useHeading(): { heading: number | null; enable: () => void } {
   return { heading, enable };
 }
 
-const FOV = 70; // degrees of bearing mapped across the screen width
-
 export default function ScannerView({
   pos,
   place,
   nearby,
   deck,
+  player,
+  trainers,
+  inviteRoomId,
   onRefresh,
+  onInviteHandled,
 }: {
   pos: Position | null;
   place: { city: string; country: string };
   nearby: NearbyAnymon[];
   deck: Anymon[];
+  player: Player;
+  trainers: NearbyTrainer[];
+  inviteRoomId: string | null;
   onRefresh: () => void;
+  onInviteHandled: () => void;
 }) {
   const webcamRef = useRef<Webcam>(null);
   const [busy, setBusy] = useState(false);
@@ -91,21 +103,31 @@ export default function ScannerView({
 
   const { heading, enable } = useHeading();
 
-  // battle state
+  // wild battle state
   const [battlingId, setBattlingId] = useState<string | null>(null);
   const [battle, setBattle] = useState<{
     attacker: Combatant;
     defender: Combatant;
+    matchup: Matchup;
   } | null>(null);
 
+  // PvP state
+  const [pvpRoomId, setPvpRoomId] = useState<string | null>(null);
+  const [challengingId, setChallengingId] = useState<string | null>(null);
+
   const attackers = useMemo(() => deck.filter((a) => a.state === "deck"), [deck]);
-  // Send your strongest (most coins) fighter into the wild battle.
+  // Send your strongest (most coins) fighter into battles.
   const chosenAttacker = useMemo(
     () => [...attackers].sort((a, b) => b.coins - a.coins)[0]?.id ?? "",
     [attackers],
   );
 
   const wild = useMemo(() => nearby.filter((a) => !a.mine), [nearby]);
+
+  // Open the PvP screen automatically when an incoming invite shows up.
+  useEffect(() => {
+    if (inviteRoomId && !pvpRoomId) setPvpRoomId(inviteRoomId);
+  }, [inviteRoomId, pvpRoomId]);
 
   const capturePhoto = useCallback(async () => {
     setError(null);
@@ -127,16 +149,16 @@ export default function ScannerView({
   }, [pos, place, enable]);
 
   const startBattle = useCallback(
-    async (defender: NearbyAnymon) => {
+    async (defenderId: string) => {
       setError(null);
       enable();
       if (!chosenAttacker)
         return setError("scan an object first to get a fighter!");
-      setBattlingId(defender.id);
+      setBattlingId(defenderId);
       try {
         const setup = await apiBattleStart({
           attackerId: chosenAttacker,
-          defenderId: defender.id,
+          defenderId,
         });
         setBattle(setup);
       } catch (e) {
@@ -148,33 +170,67 @@ export default function ScannerView({
     [chosenAttacker, enable],
   );
 
-  // Map each wild anymon to a screen position from its real bearing/distance.
-  const placed = useMemo(() => {
-    return wild.map((a, i) => {
+  const challengeTrainer = useCallback(
+    async (opponentUserId: string) => {
+      setError(null);
+      enable();
+      if (!chosenAttacker)
+        return setError("scan an object first to get a fighter!");
+      setChallengingId(opponentUserId);
+      try {
+        const res = await apiPvpChallenge({ opponentUserId, fighterId: chosenAttacker });
+        if (res.roomId) setPvpRoomId(res.roomId);
+        else setError(res.error || "could not challenge");
+      } catch (e) {
+        setError((e as Error).message);
+      } finally {
+        setChallengingId(null);
+      }
+    },
+    [chosenAttacker, enable],
+  );
+
+  // ---- map wild Anymon + trainers to AR placements ----
+  const arWild = useMemo<ArWild[]>(() => {
+    return wild.map((a) => {
       const hasGeo = pos && a.lat != null && a.lng != null;
-      const brg = hasGeo
+      const bearing = hasGeo
         ? bearingDeg(pos, { lat: a.lat as number, lng: a.lng as number })
         : hash(a.id) % 360;
-
-      let leftPct: number;
-      let off = 0; // -1 off to the left, +1 off to the right, 0 on screen
-      if (heading != null) {
-        const rel = wrap180(brg - heading);
-        leftPct = 50 + (rel / (FOV / 2)) * 50;
-        if (rel < -FOV / 2) off = -1;
-        if (rel > FOV / 2) off = 1;
-      } else {
-        // No compass: spread evenly so they're all visible over the camera.
-        leftPct = wild.length === 1 ? 50 : 8 + (i / (wild.length - 1)) * 84;
-      }
-      leftPct = clamp(leftPct, 5, 95);
-
-      const dn = clamp(a.distM / NEARBY_RADIUS_M, 0, 1); // 0 near .. 1 far
-      const topPct = 30 + dn * 26; // near sits lower, far sits higher
-      const scale = 1.05 - dn * 0.5; // near is bigger
-      return { a, leftPct, topPct, scale, off, brg };
+      return {
+        id: a.id,
+        name: a.name,
+        object: a.object,
+        spriteDataUri: a.spriteDataUri,
+        glbUrl: a.glbUrl,
+        ready: a.status === "ready",
+        distM: a.distM,
+        bearing,
+      };
     });
-  }, [wild, pos, heading]);
+  }, [wild, pos]);
+
+  const arTrainers = useMemo<ArTrainer[]>(() => {
+    return trainers.map((t) => ({
+      userId: t.userId,
+      username: t.username,
+      distM: t.distM,
+      bearing: pos ? bearingDeg(pos, { lat: t.lat, lng: t.lng }) : hash(t.userId) % 360,
+    }));
+  }, [trainers, pos]);
+
+  const radarBlips = useMemo(
+    () => [
+      ...arWild.map((w) => ({ id: w.id, brg: w.bearing, distM: w.distM, kind: "wild" as const })),
+      ...arTrainers.map((t) => ({
+        id: t.userId,
+        brg: t.bearing,
+        distM: t.distM,
+        kind: "trainer" as const,
+      })),
+    ],
+    [arWild, arTrainers],
+  );
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-black">
@@ -190,65 +246,44 @@ export default function ScannerView({
         className="absolute inset-0 h-full w-full object-cover"
       />
 
-      {/* stylized green pixel scanner filter */}
+      {/* stylized green pixel scanner filter (screen overlay only) */}
       <div className="pointer-events-none absolute inset-0 scanner-overlay" />
       <div className="pointer-events-none absolute inset-0 scanner-pixels opacity-60" />
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full overflow-hidden">
         <div className="scanner-scanline w-full" />
       </div>
 
-      {/* corner frame */}
-      <div className="pointer-events-none absolute inset-6 rounded-gummy border-2 border-anymon-lime/70" />
+      {/* ---- simulated ground-plane AR scene over the camera ---- */}
+      {camReady && (
+        <ArScene
+          wild={arWild}
+          trainers={arTrainers}
+          heading={heading}
+          busyWildId={battlingId}
+          busyTrainerId={challengingId}
+          onEngageWild={startBattle}
+          onChallengeTrainer={challengeTrainer}
+        />
+      )}
 
       {/* top status */}
-      <div className="absolute left-0 right-0 top-4 flex flex-col items-center text-white">
-        <div className="font-retro text-xs tracking-widest text-anymon-lime drop-shadow">
-          anymon scanner
-        </div>
-        <div className="mt-1 rounded-full bg-black/40 px-3 py-1 text-xs">
-          {place.city}, {place.country}
-        </div>
+      <div className="pointer-events-none absolute left-0 right-0 top-4 z-20 flex flex-col items-center">
+        <Image
+          src="/logos/scanner.png"
+          alt="scanner"
+          width={440}
+          height={180}
+          priority
+          className="h-auto w-[55%] max-w-[200px] object-contain drop-shadow"
+        />
       </div>
 
       {/* corner radar */}
-      <MiniRadar blips={placed} heading={heading} />
+      <MiniRadar blips={radarBlips} heading={heading} />
 
-      {/* ---- AR roaming anymon over the live camera ---- */}
-      {camReady &&
-        placed.map(({ a, leftPct, topPct, scale, off }) => (
-          <motion.div
-            key={a.id}
-            className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${leftPct}%`, top: `${topPct}%` }}
-            initial={{ opacity: 0, scale: 0.6 }}
-            animate={{ opacity: off ? 0.45 : 1, scale: 1 }}
-          >
-            <div className="flex flex-col items-center" style={{ transform: `scale(${scale})` }}>
-              <button
-                onClick={() => startBattle(a)}
-                disabled={battlingId === a.id}
-                className="gummy-btn mb-1 bg-anymon-lime px-3 py-1 text-xs font-bold shadow-gummy-lime disabled:opacity-60"
-              >
-                {battlingId === a.id ? "…" : off ? (off < 0 ? "◀ capture" : "capture ▶") : "capture"}
-              </button>
-              <div className="animate-bob">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={a.spriteDataUri}
-                  alt={a.name}
-                  className="h-24 w-24 object-contain drop-shadow-[0_6px_10px_rgba(0,0,0,0.55)]"
-                />
-              </div>
-              <div className="rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-bold text-white">
-                {a.name} · {a.distM}m
-              </div>
-            </div>
-          </motion.div>
-        ))}
-
-      {camReady && wild.length === 0 && (
-        <div className="absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-gummy bg-black/45 px-4 py-2 text-center text-xs text-white/80">
-          no wild anymon nearby — scan an object or move around
+      {camReady && wild.length === 0 && trainers.length === 0 && (
+        <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 rounded-gummy bg-black/45 px-4 py-2 text-center text-xs text-white/80">
+          no wild anymon or trainers nearby — scan an object or move around
         </div>
       )}
 
@@ -264,8 +299,8 @@ export default function ScannerView({
         </div>
       )}
 
-      {/* capture (photo) button */}
-      <div className="absolute inset-x-0 bottom-8 z-30 flex flex-col items-center gap-2">
+      {/* capture (photo) button — raised to clear the bottom nav */}
+      <div className="absolute inset-x-0 bottom-24 z-30 flex flex-col items-center gap-2">
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={capturePhoto}
@@ -294,8 +329,24 @@ export default function ScannerView({
           <BattleScreen
             attacker={battle.attacker}
             defender={battle.defender}
+            matchup={battle.matchup}
             onClose={() => {
               setBattle(null);
+              onRefresh();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pvpRoomId && (
+          <PvpBattleScreen
+            roomId={pvpRoomId}
+            me={{ id: player.id, name: player.name }}
+            myFighterId={chosenAttacker || null}
+            onClose={() => {
+              setPvpRoomId(null);
+              onInviteHandled();
               onRefresh();
             }}
           />
@@ -306,29 +357,27 @@ export default function ScannerView({
 }
 
 // ---- small corner radar ----
-function MiniRadar({
-  blips,
-  heading,
-}: {
-  blips: { a: NearbyAnymon; brg: number }[];
-  heading: number | null;
-}) {
+type Blip = { id: string; brg: number; distM: number; kind: "wild" | "trainer" };
+
+function MiniRadar({ blips, heading }: { blips: Blip[]; heading: number | null }) {
   return (
-    <div className="absolute right-4 top-16 z-20 h-24 w-24">
+    <div className="pointer-events-none absolute right-4 top-16 z-20 h-24 w-24">
       <div className="relative h-full w-full rounded-full border border-anymon-lime/40 bg-black/40 backdrop-blur-sm">
         <div className="absolute inset-[22%] rounded-full border border-anymon-lime/20" />
         {/* you (always center, facing up) */}
         <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_8px_#fff]" />
         {/* sweep */}
-        <div className="absolute inset-0 animate-[spin_4s_linear_infinite] rounded-full bg-[conic-gradient(from_0deg,rgba(50,205,50,0.35),transparent_25%)]" />
-        {blips.map(({ a, brg }) => {
+        <div className="absolute inset-0 animate-[spin_4s_linear_infinite] rounded-full bg-[conic-gradient(from_0deg,rgba(139,224,30,0.35),transparent_25%)]" />
+        {blips.map((b) => {
           // 12 o'clock = the direction you're facing; rotate blips by heading.
-          const ang = toRad(brg - (heading ?? 0) - 90);
-          const r = clamp(a.distM / NEARBY_RADIUS_M, 0.12, 1) * 40;
+          const ang = toRad(b.brg - (heading ?? 0) - 90);
+          const r = clamp(b.distM / NEARBY_RADIUS_M, 0.12, 1) * 40;
           return (
             <div
-              key={a.id}
-              className="absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-anymon-lime shadow-[0_0_6px_currentColor]"
+              key={b.id}
+              className={`absolute h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full shadow-[0_0_6px_currentColor] ${
+                b.kind === "trainer" ? "bg-anymon-berry" : "bg-anymon-lime"
+              }`}
               style={{
                 left: `${50 + Math.cos(ang) * r}%`,
                 top: `${50 + Math.sin(ang) * r}%`,

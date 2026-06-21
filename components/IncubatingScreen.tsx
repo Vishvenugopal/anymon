@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import AnymonCanvas from "./AnymonCanvas";
+import { trainerName } from "./DeckView";
 import { apiCaptureStatus, type CaptureResult } from "@/lib/client";
 
 export default function IncubatingScreen({
@@ -52,8 +53,8 @@ export default function IncubatingScreen({
         {ready ? "hatched!" : "incubating..."}
       </div>
       <div className="mb-1 text-2xl font-bold">{capture.object}-mon</div>
-      <div className="mb-6 text-sm opacity-80">
-        created by {capture.ownerName}
+      <div className="preserve-case mb-6 text-sm opacity-80">
+        {trainerName(capture.ownerName)}
       </div>
 
       <motion.div

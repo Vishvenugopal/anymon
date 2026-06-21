@@ -7,17 +7,28 @@ import {
   apiBattleResolve,
   type BattleOutcome,
   type Combatant,
+  type Matchup,
   type Move,
 } from "@/lib/client";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const STATUS_HEAL = 14;
 
-function roll(move: Move): { miss: boolean; crit: boolean; dmg: number } {
+function effLabel(mult: number): string {
+  if (mult >= 2) return "super effective!";
+  if (mult >= 1.5) return "effective!";
+  if (mult <= 0.5) return "not very effective…";
+  return "";
+}
+
+function roll(move: Move, eff: number): { miss: boolean; crit: boolean; dmg: number } {
   if (Math.random() * 100 > move.accuracy) return { miss: true, crit: false, dmg: 0 };
   const crit = Math.random() < 0.12;
   const variance = 0.85 + Math.random() * 0.15;
-  const dmg = Math.max(1, Math.round(move.power * variance * (crit ? 1.6 : 1)));
+  const dmg = Math.max(
+    1,
+    Math.round(move.power * variance * (crit ? 1.6 : 1) * eff),
+  );
   return { miss: false, crit, dmg };
 }
 
@@ -51,10 +62,12 @@ function HpBar({ hp, max, name }: { hp: number; max: number; name: string }) {
 export default function BattleScreen({
   attacker,
   defender,
+  matchup,
   onClose,
 }: {
   attacker: Combatant;
   defender: Combatant;
+  matchup?: Matchup;
   onClose: () => void;
 }) {
   const aHpRef = useRef(attacker.maxHp);
@@ -74,7 +87,9 @@ export default function BattleScreen({
     "player" | "anim" | "resolving" | "result"
   >("player");
   const [log, setLog] = useState<string>(
-    `A wild ${defender.name} appeared! Choose your move.`,
+    matchup
+      ? `A wild ${defender.name} appeared! ${matchup.intro}`
+      : `A wild ${defender.name} appeared! Choose your move.`,
   );
   const [enemyHit, setEnemyHit] = useState(false);
   const [playerHit, setPlayerHit] = useState(false);
@@ -135,7 +150,10 @@ export default function BattleScreen({
         return;
       }
 
-      const r = roll(move);
+      // attacker = matchup "a", defender = matchup "b".
+      const dir = isPlayer ? matchup?.aToB : matchup?.bToA;
+      const eff = dir?.multiplier ?? 1;
+      const r = roll(move, eff);
       if (r.miss) {
         setLog(`${actor.name} used ${move.name}… but it missed!`);
         await wait(1000);
@@ -151,14 +169,16 @@ export default function BattleScreen({
         setPlayerHit(true);
         setTimeout(() => setPlayerHit(false), 320);
       }
+      const label = effLabel(eff);
+      const science = label && dir?.reason ? `${label} ${dir.reason}` : move.blurb;
       setLog(
         `${actor.name} used ${move.emoji} ${move.name}! ${
           r.crit ? "Critical hit! " : ""
-        }${move.blurb}`,
+        }${science}`,
       );
       await wait(1150);
     },
-    [attacker, defender],
+    [attacker, defender, matchup],
   );
 
   const chooseEnemyMove = useCallback((): Move => {

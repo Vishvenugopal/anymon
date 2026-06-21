@@ -20,6 +20,31 @@ export function anymonStylePrompt(object: string): string {
 export const OBJECT_ID_PROMPT =
   "Identify the single primary physical object in this image. Reply with ONLY one lowercase noun, no punctuation, no extra words. If unclear, give your best single-word guess.";
 
+// Capture-time identify + creative name in one Claude call.
+export const IDENTIFY_AND_NAME_PROMPT = [
+  "Look at this image. Identify the single primary physical object, then invent a fun",
+  "Pokemon-style creature name for an 'Anymon' based on it. The name should HINT at the",
+  "real object (blend its word with a creature-y suffix), be catchy, 3-14 letters, one word,",
+  "no spaces, capitalized like a Pokemon (e.g. a mug -> 'Muglet', a bottle -> 'Aquaflask',",
+  "a lamp -> 'Lumosaur', a book -> 'Tomeling').",
+  'Respond with ONLY a JSON object, no markdown fences: {"object":"<one lowercase noun>","name":"<CreativeName>"}',
+].join(" ");
+
+// ---- Matchup reasoning (the "weakness initialization") ----
+export const MATCHUP_SYSTEM_PROMPT = [
+  "You are the type-matchup engine for Anymon, an educational monster-battler.",
+  "Two creatures based on REAL-WORLD objects are about to battle. Using real physics,",
+  "chemistry, biology, or materials science, decide how effective each one is against the",
+  "other. Effectiveness is a damage multiplier in {0.5, 1, 1.5, 2}: 2 = super effective,",
+  "1.5 = effective, 1 = neutral, 0.5 = resisted. Give a short, true reason for each direction.",
+  "Respond with ONLY a JSON object (no markdown fences) EXACTLY:",
+  '{"intro":"<<=12 word punchy weakness-initialization line>","field":"<physics|chemistry|biology|materials>","aToB":{"multiplier":<0.5|1|1.5|2>,"reason":"<<=14 word real reason A beats/loses to B>"},"bToA":{"multiplier":<0.5|1|1.5|2>,"reason":"<<=14 word real reason B beats/loses to A>"}}',
+].join(" ");
+
+export function matchupUserPrompt(aObject: string, bObject: string): string {
+  return `Anymon A is based on a ${aObject}. Anymon B is based on a ${bObject}. How effective is each against the other, and why?`;
+}
+
 export const BATTLE_SYSTEM_PROMPT = [
   "You are the Game Master for Anymon, an educational AR monster-battler for curious kids and teens.",
   "Two Anymons, each based on a real-world object, are battling. Decide the winner using REAL-WORLD logic:",

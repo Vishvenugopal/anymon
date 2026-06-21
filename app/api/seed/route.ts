@@ -6,10 +6,10 @@ import { NEARBY_RADIUS_M, type Anymon } from "@/lib/types";
 export const runtime = "nodejs";
 
 const SEEDS = [
-  { object: "book", owner: "maple-7f3a", city: "Berkeley", country: "USA" },
-  { object: "waterbottle", owner: "comet-2b1c", city: "Tokyo", country: "Japan" },
-  { object: "umbrella", owner: "river-9d4e", city: "London", country: "UK" },
-  { object: "lamp", owner: "nova-5a8b", city: "Paris", country: "France" },
+  { object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA" },
+  { object: "waterbottle", name: "Aquaflask", owner: "comet-2b1c", city: "Tokyo", country: "Japan" },
+  { object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK" },
+  { object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France" },
 ];
 
 function offset(lat: number, lng: number, meters: number, bearingDeg: number) {
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
       const a: Anymon = {
         id: crypto.randomUUID(),
         object: s.object,
-        name: `${s.object}-mon`,
+        name: s.name,
         ownerId: `seed:${s.owner}`,
         ownerName: s.owner,
         spriteDataUri: placeholderSprite(s.object),

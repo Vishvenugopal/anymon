@@ -1,13 +1,16 @@
 import Anthropic from "@anthropic-ai/sdk";
 import {
   BATTLE_SYSTEM_PROMPT,
+  IDENTIFY_AND_NAME_PROMPT,
+  MATCHUP_SYSTEM_PROMPT,
   MOVES_SYSTEM_PROMPT,
   OBJECT_ID_PROMPT,
   battleUserPrompt,
+  matchupUserPrompt,
   movesUserPrompt,
 } from "./prompts";
 import { compressContext } from "./tokencompany";
-import type { Move, MoveKind } from "./types";
+import type { Matchup, MatchupDir, Move, MoveKind } from "./types";
 
 function client(): Anthropic {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -97,6 +100,78 @@ export async function identifyObject(
     .trim()
     .toLowerCase();
   return text.replace(/[^a-z]/g, "") || "creature";
+}
+
+// ---- Creative naming ----
+
+const NAME_SUFFIXES = ["mon", "ling", "zor", "saur", "puff", "ko", "drix", "ix", "let", "o"];
+
+/**
+ * Deterministic, offline Pokemon-style name from an object word. Same object
+ * always yields the same name (so it reads as a real species), while still
+ * clearly hinting at the source object.
+ */
+export function creativeName(object: string): string {
+  const raw = (object || "creature").toLowerCase().replace(/[^a-z]/g, "");
+  if (!raw) return "Anymon";
+  // Use a stable hash to pick how much of the root to keep + which suffix.
+  let h = 0;
+  for (let i = 0; i < raw.length; i++) h = (h * 31 + raw.charCodeAt(i)) >>> 0;
+  const root = raw.length <= 4 ? raw : raw.slice(0, 3 + (h % 3)); // keep 3-5 chars
+  const suffix = NAME_SUFFIXES[h % NAME_SUFFIXES.length];
+  // Avoid an awkward double letter at the seam (e.g. "lampphone").
+  const seam = root.endsWith(suffix[0]) ? suffix.slice(1) : suffix;
+  const name = root + seam;
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** Claude Vision -> { object, creative name } in one call (falls back locally). */
+export async function identifyAndName(
+  photoBase64OrDataUri: string,
+): Promise<{ object: string; name: string }> {
+  const { mimeType, data } = splitDataUri(photoBase64OrDataUri);
+  try {
+    const c = client();
+    const msg = await c.messages.create({
+      model: await pickModel(),
+      max_tokens: 60,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mimeType as
+                  | "image/jpeg"
+                  | "image/png"
+                  | "image/gif"
+                  | "image/webp",
+                data,
+              },
+            },
+            { type: "text", text: IDENTIFY_AND_NAME_PROMPT },
+          ],
+        },
+      ],
+    });
+    const text = msg.content
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("")
+      .trim();
+    const jsonStr = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+    const parsed = JSON.parse(jsonStr) as { object?: string; name?: string };
+    const object = (parsed.object || "creature").toLowerCase().replace(/[^a-z ]/g, "").trim() || "creature";
+    let name = (parsed.name || "").replace(/[^A-Za-z]/g, "").slice(0, 16);
+    if (name.length < 3) name = creativeName(object);
+    else name = name.charAt(0).toUpperCase() + name.slice(1);
+    return { object, name };
+  } catch (e) {
+    console.warn("[claude] identifyAndName fell back:", (e as Error).message);
+    const object = "creature";
+    return { object, name: creativeName(object) };
+  }
 }
 
 export interface RawBattle {
@@ -220,4 +295,103 @@ function parseBattle(
     lesson: `When a ${args.aObject} meets a ${args.bObject}, their material properties decide the day.`,
     field: "physics",
   };
+}
+
+// ---- Matchup reasoning ("weakness initialization") ----
+
+const MATCHUP_MULTS = [0.5, 1, 1.5, 2];
+const snapMult = (v: unknown): number => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return 1;
+  return MATCHUP_MULTS.reduce((best, m) =>
+    Math.abs(m - n) < Math.abs(best - n) ? m : best,
+  );
+};
+
+// Loose property tags so the offline fallback can reason about materials.
+const TAGS: Record<string, string[]> = {
+  water: ["water", "bottle", "flask", "cup", "mug", "glass", "drink", "rain", "umbrella", "pool"],
+  fire: ["fire", "candle", "lighter", "match", "torch", "stove", "heater"],
+  metal: ["metal", "knife", "fork", "spoon", "key", "can", "coin", "wrench", "scissors", "phone", "laptop"],
+  electric: ["electric", "phone", "laptop", "lamp", "charger", "battery", "wire", "cable", "bulb"],
+  plant: ["plant", "leaf", "flower", "tree", "wood", "book", "paper", "pencil"],
+  fragile: ["glass", "bulb", "egg", "mirror", "bottle", "cup"],
+  soft: ["pillow", "plush", "cloth", "sock", "shoe", "towel", "sponge"],
+};
+
+function tagsOf(object: string): Set<string> {
+  const o = (object || "").toLowerCase();
+  const set = new Set<string>();
+  for (const [tag, words] of Object.entries(TAGS)) {
+    if (words.some((w) => o.includes(w))) set.add(tag);
+  }
+  return set;
+}
+
+/** Deterministic, offline matchup so battles always have a reason. */
+export function heuristicMatchup(aObject: string, bObject: string): Matchup {
+  const A = tagsOf(aObject);
+  const B = tagsOf(bObject);
+  const dir = (atk: Set<string>, def: Set<string>, a: string, b: string): MatchupDir => {
+    if (atk.has("water") && def.has("fire"))
+      return { multiplier: 2, reason: `the ${a}'s water smothers the ${b}'s flame.` };
+    if (atk.has("water") && def.has("electric"))
+      return { multiplier: 1.5, reason: `water from the ${a} conducts and shorts the ${b}.` };
+    if (atk.has("fire") && def.has("plant"))
+      return { multiplier: 2, reason: `the ${a}'s heat scorches the ${b}'s fibers.` };
+    if (atk.has("fire") && def.has("water"))
+      return { multiplier: 0.5, reason: `the ${b}'s water quenches the ${a}'s heat.` };
+    if (atk.has("metal") && def.has("fragile"))
+      return { multiplier: 2, reason: `hard metal of the ${a} shatters the brittle ${b}.` };
+    if (atk.has("soft") && def.has("metal"))
+      return { multiplier: 0.5, reason: `the soft ${a} can't dent the rigid ${b}.` };
+    if (atk.has("electric") && def.has("water"))
+      return { multiplier: 1.5, reason: `the ${a}'s current arcs through the wet ${b}.` };
+    return { multiplier: 1, reason: `the ${a} and ${b} trade even blows — material vs material.` };
+  };
+  const aToB = dir(A, B, aObject, bObject);
+  const bToA = dir(B, A, bObject, aObject);
+  const lead =
+    aToB.multiplier > bToA.multiplier
+      ? `${aObject} has the edge`
+      : bToA.multiplier > aToB.multiplier
+        ? `${bObject} has the edge`
+        : "an even matchup";
+  return { intro: `weakness initialized — ${lead}!`, field: "materials", aToB, bToA };
+}
+
+/** One cached call at battle start: effectiveness multipliers + reasons. */
+export async function judgeMatchup(
+  aObject: string,
+  bObject: string,
+): Promise<Matchup> {
+  try {
+    const c = client();
+    const msg = await c.messages.create({
+      model: await pickModel(),
+      max_tokens: 300,
+      system: MATCHUP_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: matchupUserPrompt(aObject, bObject) }],
+    });
+    const text = msg.content
+      .map((p) => (p.type === "text" ? p.text : ""))
+      .join("")
+      .trim();
+    const jsonStr = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
+    const p = JSON.parse(jsonStr) as Partial<Matchup>;
+    const fb = heuristicMatchup(aObject, bObject);
+    const dir = (d: Partial<MatchupDir> | undefined, f: MatchupDir): MatchupDir => ({
+      multiplier: snapMult(d?.multiplier),
+      reason: String(d?.reason || f.reason).slice(0, 120),
+    });
+    return {
+      intro: String(p.intro || fb.intro).slice(0, 90),
+      field: String(p.field || fb.field).slice(0, 20),
+      aToB: dir(p.aToB, fb.aToB),
+      bToA: dir(p.bToA, fb.bToA),
+    };
+  } catch (e) {
+    console.warn("[claude] judgeMatchup fell back to heuristic:", (e as Error).message);
+    return heuristicMatchup(aObject, bObject);
+  }
 }

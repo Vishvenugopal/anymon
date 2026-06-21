@@ -1,6 +1,14 @@
 "use client";
 
-import type { Anymon, BattleOutcome, GeoHit, Move } from "./types";
+import type {
+  Anymon,
+  BattleOutcome,
+  BattleRoom,
+  GeoHit,
+  Matchup,
+  Move,
+  NearbyTrainer,
+} from "./types";
 
 // The signed-in player, derived from the server session (not localStorage).
 export interface Player {
@@ -154,7 +162,7 @@ export interface Combatant {
 export async function apiBattleStart(body: {
   attackerId: string;
   defenderId: string;
-}): Promise<{ attacker: Combatant; defender: Combatant }> {
+}): Promise<{ attacker: Combatant; defender: Combatant; matchup: Matchup }> {
   const res = await fetch("/api/battle/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -211,4 +219,92 @@ export async function apiAutoBattle(
   }
 }
 
-export type { Anymon, BattleOutcome, GeoHit, Move };
+// ---- Presence (nearby trainers + incoming PvP invites) ----
+export interface PresenceResult {
+  trainers: NearbyTrainer[];
+  invite: { roomId: string; fromUsername: string } | null;
+}
+
+export async function apiPresence(pos: Position): Promise<PresenceResult> {
+  try {
+    const res = await fetch("/api/presence", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lat: pos.lat, lng: pos.lng }),
+    });
+    if (!res.ok) return { trainers: [], invite: null };
+    return res.json();
+  } catch {
+    return { trainers: [], invite: null };
+  }
+}
+
+// ---- Trainer-vs-trainer (PvP) battles ----
+export async function apiPvpChallenge(body: {
+  opponentUserId: string;
+  fighterId: string;
+}): Promise<{ roomId?: string; error?: string }> {
+  const res = await fetch("/api/pvp/challenge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function apiPvpRespond(body: {
+  roomId: string;
+  accept: boolean;
+  fighterId?: string;
+}): Promise<{ ok?: boolean; error?: string }> {
+  const res = await fetch("/api/pvp/respond", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function apiPvpRoom(roomId: string): Promise<BattleRoom | null> {
+  try {
+    const res = await fetch(`/api/pvp/room?id=${encodeURIComponent(roomId)}`, {
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data.room as BattleRoom) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function apiPvpMove(body: {
+  roomId: string;
+  moveName: string;
+}): Promise<{ ok?: boolean; error?: string }> {
+  const res = await fetch("/api/pvp/move", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export function apiPvpCancel(roomId: string): void {
+  fetch("/api/pvp/cancel", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ roomId }),
+    keepalive: true,
+  }).catch(() => {});
+}
+
+export type {
+  Anymon,
+  BattleOutcome,
+  BattleRoom,
+  GeoHit,
+  Matchup,
+  Move,
+  NearbyTrainer,
+};

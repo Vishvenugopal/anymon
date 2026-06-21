@@ -1,4 +1,4 @@
-import { identifyObject } from "./claude";
+import { creativeName, identifyAndName } from "./claude";
 import { generateAnymonSprite } from "./gemini";
 import { create3D, get3D, is3DMock, provider } from "./threed";
 import { placeholderSprite, sampleGlb } from "./placeholder";
@@ -43,17 +43,21 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
     deployedAt: null,
   };
 
-  // 1) object label + 2) 2D sprite
+  // 1) object label + creative name + 2) 2D sprite
   let object = "mystery";
+  let name = creativeName(object);
   let sprite: string;
   if (isImageMock()) {
     sprite = placeholderSprite(object);
   } else {
     try {
-      object = await identifyObject(input.imageBase64);
+      const id = await identifyAndName(input.imageBase64);
+      object = id.object;
+      name = id.name;
     } catch (e) {
-      console.error("identifyObject failed", e);
+      console.error("identifyAndName failed", e);
       object = "creature";
+      name = creativeName(object);
     }
     try {
       sprite = await generateAnymonSprite(input.imageBase64, object);
@@ -82,7 +86,7 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
   return {
     ...base,
     object,
-    name: `${object}-mon`,
+    name,
     spriteDataUri: sprite,
     meshyTaskId,
   };

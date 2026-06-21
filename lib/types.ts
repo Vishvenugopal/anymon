@@ -73,3 +73,75 @@ export interface BattleOutcome {
   coinsAwarded: number;
   captured: boolean; // did ownership transfer?
 }
+
+// ---- Matchup reasoning (the "weakness initialization") ----
+// One direction of a type matchup: how hard `a` hits `b` and why.
+export interface MatchupDir {
+  multiplier: number; // damage multiplier (e.g. 0.5, 1, 1.5, 2)
+  reason: string; // short physics/chemistry tie-in
+}
+
+// Computed once at battle start. `aToB` = the A-side hitting the B-side.
+export interface Matchup {
+  intro: string; // headline "weakness initialization" line
+  field: string; // physics | chemistry | biology | ...
+  aToB: MatchupDir;
+  bToA: MatchupDir;
+}
+
+// ---- Player presence (geo-indexed, TTL'd) ----
+export const PRESENCE_TTL_MS = 60_000; // a trainer is "live" for 60s after ping
+export const NEARBY_PLAYERS_RADIUS_M = 150;
+
+export interface NearbyTrainer {
+  userId: string;
+  username: string;
+  distM: number;
+  lat: number;
+  lng: number;
+}
+
+// ---- Trainer-vs-trainer (PvP) battles over polling ----
+export type PvpStatus = "pending" | "active" | "finished" | "declined" | "cancelled";
+
+export const PVP_CHALLENGE_COOLDOWN_MS = 20_000;
+
+// A combatant inside a shared BattleRoom (server-authoritative HP + moves).
+export interface BattleFighter {
+  userId: string;
+  username: string;
+  anymonId: string;
+  name: string;
+  object: string;
+  spriteDataUri: string;
+  glbUrl: string | null;
+  maxHp: number;
+  hp: number;
+  moves: Move[];
+}
+
+export interface BattleLogEntry {
+  text: string; // human-readable line ("Trainer X used …")
+  reason?: string; // physics/chemistry tie-in for the turn
+  effectiveness?: number; // applied damage multiplier this turn
+}
+
+// Shared room both clients poll. `challenger` = the A-side, `opponent` = B-side.
+export interface BattleRoom {
+  id: string;
+  challenger: BattleFighter;
+  opponent: BattleFighter | null; // null until the invite is accepted
+  status: PvpStatus;
+  turnUserId: string | null; // whose move it is
+  log: BattleLogEntry[];
+  matchup: Matchup | null; // challenger = a, opponent = b
+  winnerId: string | null;
+  coinsAwarded: number;
+  captured: boolean; // did the winner capture the loser's fighter?
+  version: number; // bumped on every mutation (cheap change-detection)
+  createdAt: number;
+  updatedAt: number;
+}
+
+export const PVP_BASE_HP = BASE_HP;
+export const PVP_COINS_AWARDED = 15;

@@ -6,8 +6,11 @@
 
 :root {
   --anymon-white: #ffffff;
-  --anymon-lime: #32cd32;
-  --anymon-ocean: #00bfff;
+  --anymon-lime: #8be01e;
+  --anymon-lime-dark: #5ca30f;
+  --anymon-ocean: #3fb0d6;
+  --anymon-berry: #ff3b53;
+  --anymon-ink: #0a1418;
 }
 
 html,
@@ -36,12 +39,44 @@ textarea {
   .card-gummy {
     @apply rounded-gummy bg-white border-2 border-anymon-cloud shadow-gummy;
   }
+
+  /* ---- Retro / Pokemon / Persona-5 primitives ---- */
+
+  /* Chunky bordered panel with a hard angular offset shadow. */
+  .retro-panel {
+    @apply rounded-xl border-2 border-anymon-ink bg-white shadow-retro;
+  }
+
+  /* Angular Persona-style header strip (slight skew handled via accent bar). */
+  .retro-header {
+    @apply font-retro uppercase tracking-widest text-anymon-ink;
+  }
+
+  /* Chunky tactile button: bold border + hard offset shadow that "presses". */
+  .retro-btn {
+    @apply inline-flex items-center justify-center rounded-lg border-2 border-anymon-ink
+      font-bold text-anymon-ink shadow-retro transition-transform select-none
+      active:translate-x-[3px] active:translate-y-[3px] active:shadow-none
+      disabled:opacity-60;
+  }
+
+  /* Small element / type badge (Pokemon "type" chip). */
+  .type-badge {
+    @apply inline-flex items-center gap-1 rounded-md border-2 border-anymon-ink
+      bg-anymon-lime px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide
+      text-anymon-ink shadow-[2px_2px_0_0_#0a1418];
+  }
+}
+
+/* Preserve casing for proper nouns (e.g. "Trainer X") despite global lowercase. */
+.preserve-case {
+  text-transform: none;
 }
 
 /* Stylized green pixel scanner overlay */
 .scanner-overlay {
   background:
-    linear-gradient(rgba(50, 205, 50, 0.18), rgba(0, 191, 255, 0.12)),
+    linear-gradient(rgba(139, 224, 30, 0.2), rgba(63, 176, 214, 0.1)),
     repeating-linear-gradient(
       0deg,
       rgba(0, 0, 0, 0.12) 0px,
@@ -54,7 +89,7 @@ textarea {
 
 .scanner-pixels {
   background-image: radial-gradient(
-    rgba(50, 205, 50, 0.35) 1px,
+    rgba(139, 224, 30, 0.4) 1px,
     transparent 1.6px
   );
   background-size: 6px 6px;
@@ -65,7 +100,7 @@ textarea {
   background: linear-gradient(
     to bottom,
     transparent,
-    rgba(50, 205, 50, 0.85),
+    rgba(139, 224, 30, 0.9),
     transparent
   );
   height: 22%;

@@ -1,5 +1,13 @@
 import type Redis from "ioredis";
-import type { Anymon, AnymonState, GeoHit, User } from "./types";
+import type {
+  Anymon,
+  AnymonState,
+  BattleRoom,
+  GeoHit,
+  NearbyTrainer,
+  User,
+} from "./types";
+import { PRESENCE_TTL_MS } from "./types";
 
 // Storage abstraction. Prefers Redis (real GEOADD/GEOSEARCH + locks) when
 // REDIS_URL is set; otherwise falls back to an in-memory store so the app
@@ -23,6 +31,20 @@ export interface Store {
   getUserIdByUsername(username: string): Promise<string | null>;
   /** Atomically reserve a username for a user id. Returns false if taken. */
   reserveUsername(username: string, userId: string): Promise<boolean>;
+  // Presence (TTL + geo index of live trainers)
+  setPresence(userId: string, lat: number, lng: number, username: string): Promise<void>;
+  nearbyPlayers(lat: number, lng: number, radiusM: number): Promise<NearbyTrainer[]>;
+  // PvP rooms
+  saveRoom(room: BattleRoom): Promise<void>;
+  getRoom(id: string): Promise<BattleRoom | null>;
+  /** Patch a room; auto-bumps version + updatedAt unless the patch sets them. */
+  updateRoom(id: string, patch: Partial<BattleRoom>): Promise<BattleRoom | null>;
+  // Per-user incoming invite pointer (the pending room someone is challenging me to)
+  setIncomingInvite(userId: string, roomId: string | null): Promise<void>;
+  getIncomingInvite(userId: string): Promise<string | null>;
+  // Per-user active/pending room pointer (anti-spam: one live room per user)
+  setUserRoom(userId: string, roomId: string | null): Promise<void>;
+  getUserRoom(userId: string): Promise<string | null>;
 }
 
 function haversineMeters(
@@ -49,6 +71,13 @@ class MemoryStore implements Store {
   private locks = new Map<string, number>();
   private users = new Map<string, User>();
   private usernames = new Map<string, string>(); // lower(username) -> userId
+  private presence = new Map<
+    string,
+    { lat: number; lng: number; username: string; exp: number }
+  >();
+  private rooms = new Map<string, BattleRoom>();
+  private incomingInvite = new Map<string, string>(); // userId -> roomId
+  private userRoom = new Map<string, string>(); // userId -> roomId
 
   async getUser(id: string) {
     return this.users.get(id) ?? null;
@@ -114,6 +143,58 @@ class MemoryStore implements Store {
   async releaseLock(id: string) {
     this.locks.delete(id);
   }
+
+  async setPresence(userId: string, lat: number, lng: number, username: string) {
+    this.presence.set(userId, { lat, lng, username, exp: Date.now() + PRESENCE_TTL_MS });
+  }
+  async nearbyPlayers(lat: number, lng: number, radiusM: number) {
+    const now = Date.now();
+    const out: NearbyTrainer[] = [];
+    for (const [userId, p] of this.presence.entries()) {
+      if (p.exp <= now) {
+        this.presence.delete(userId);
+        continue;
+      }
+      const distM = haversineMeters(lat, lng, p.lat, p.lng);
+      if (distM <= radiusM) {
+        out.push({ userId, username: p.username, distM, lat: p.lat, lng: p.lng });
+      }
+    }
+    return out.sort((a, b) => a.distM - b.distM);
+  }
+
+  async saveRoom(room: BattleRoom) {
+    this.rooms.set(room.id, room);
+  }
+  async getRoom(id: string) {
+    return this.rooms.get(id) ?? null;
+  }
+  async updateRoom(id: string, patch: Partial<BattleRoom>) {
+    const cur = this.rooms.get(id);
+    if (!cur) return null;
+    const next: BattleRoom = {
+      ...cur,
+      ...patch,
+      version: patch.version ?? cur.version + 1,
+      updatedAt: patch.updatedAt ?? Date.now(),
+    };
+    this.rooms.set(id, next);
+    return next;
+  }
+  async setIncomingInvite(userId: string, roomId: string | null) {
+    if (roomId) this.incomingInvite.set(userId, roomId);
+    else this.incomingInvite.delete(userId);
+  }
+  async getIncomingInvite(userId: string) {
+    return this.incomingInvite.get(userId) ?? null;
+  }
+  async setUserRoom(userId: string, roomId: string | null) {
+    if (roomId) this.userRoom.set(userId, roomId);
+    else this.userRoom.delete(userId);
+  }
+  async getUserRoom(userId: string) {
+    return this.userRoom.get(userId) ?? null;
+  }
 }
 
 // ---------------- Redis store ----------------
@@ -125,6 +206,11 @@ const KEY = {
   lock: (id: string) => `lock:anymon:${id}`,
   user: (id: string) => `user:${id}`,
   username: (name: string) => `username:${name.toLowerCase()}`,
+  presence: (userId: string) => `presence:${userId}`,
+  playersGeo: "players:geo",
+  room: (id: string) => `room:${id}`,
+  invite: (userId: string) => `invite:${userId}`,
+  userRoom: (userId: string) => `userroom:${userId}`,
 };
 
 class RedisStore implements Store {
@@ -224,6 +310,87 @@ class RedisStore implements Store {
     // Allow the same user to "re-reserve" their own name (idempotent).
     const current = await this.redis.get(KEY.username(username));
     return current === userId;
+  }
+
+  async setPresence(userId: string, lat: number, lng: number, username: string) {
+    const pipe = this.redis.pipeline();
+    // Per-member geo TTL isn't a thing, so we TTL the presence record and lazily
+    // prune the geo index on read.
+    pipe.set(
+      KEY.presence(userId),
+      JSON.stringify({ username, lat, lng }),
+      "PX",
+      PRESENCE_TTL_MS,
+    );
+    pipe.geoadd(KEY.playersGeo, lng, lat, userId);
+    await pipe.exec();
+  }
+  async nearbyPlayers(lat: number, lng: number, radiusM: number) {
+    const res = (await this.redis.geosearch(
+      KEY.playersGeo,
+      "FROMLONLAT",
+      lng,
+      lat,
+      "BYRADIUS",
+      radiusM,
+      "m",
+      "ASC",
+      "WITHCOORD",
+      "WITHDIST",
+    )) as Array<[string, string, [string, string]]>;
+    const out: NearbyTrainer[] = [];
+    for (const [userId, dist, [, mLat]] of res) {
+      const raw = await this.redis.get(KEY.presence(userId));
+      if (!raw) {
+        // Expired presence — drop the stale geo entry.
+        await this.redis.zrem(KEY.playersGeo, userId).catch(() => {});
+        continue;
+      }
+      const p = JSON.parse(raw) as { username: string; lat: number; lng: number };
+      out.push({
+        userId,
+        username: p.username,
+        distM: parseFloat(dist),
+        lat: parseFloat(mLat) || p.lat,
+        lng: p.lng,
+      });
+    }
+    return out;
+  }
+
+  async saveRoom(room: BattleRoom) {
+    // Rooms self-expire after an hour so dead demos don't linger.
+    await this.redis.set(KEY.room(room.id), JSON.stringify(room), "PX", 3_600_000);
+  }
+  async getRoom(id: string) {
+    const raw = await this.redis.get(KEY.room(id));
+    return raw ? (JSON.parse(raw) as BattleRoom) : null;
+  }
+  async updateRoom(id: string, patch: Partial<BattleRoom>) {
+    const cur = await this.getRoom(id);
+    if (!cur) return null;
+    const next: BattleRoom = {
+      ...cur,
+      ...patch,
+      version: patch.version ?? cur.version + 1,
+      updatedAt: patch.updatedAt ?? Date.now(),
+    };
+    await this.saveRoom(next);
+    return next;
+  }
+  async setIncomingInvite(userId: string, roomId: string | null) {
+    if (roomId) await this.redis.set(KEY.invite(userId), roomId, "PX", 3_600_000);
+    else await this.redis.del(KEY.invite(userId));
+  }
+  async getIncomingInvite(userId: string) {
+    return this.redis.get(KEY.invite(userId));
+  }
+  async setUserRoom(userId: string, roomId: string | null) {
+    if (roomId) await this.redis.set(KEY.userRoom(userId), roomId, "PX", 3_600_000);
+    else await this.redis.del(KEY.userRoom(userId));
+  }
+  async getUserRoom(userId: string) {
+    return this.redis.get(KEY.userRoom(userId));
   }
 }
 

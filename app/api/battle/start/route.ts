@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { getMovesFor } from "@/lib/moves";
+import { judgeMatchup } from "@/lib/claude";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { BASE_HP } from "@/lib/types";
 
@@ -37,9 +38,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const [aMoves, dMoves] = await Promise.all([
+    const [aMoves, dMoves, matchup] = await Promise.all([
       getMovesFor(attacker),
       getMovesFor(defender),
+      judgeMatchup(attacker.object, defender.object),
     ]);
 
     const pack = (a: typeof attacker, moves: typeof aMoves) => ({
@@ -55,6 +57,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       attacker: pack(attacker, aMoves),
       defender: pack(defender, dMoves),
+      matchup, // attacker = a, defender = b
     });
   } catch (e) {
     console.error("battle start error", e);

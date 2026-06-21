@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { signIn } from "next-auth/react";
 import { motion } from "framer-motion";
 
@@ -36,12 +37,18 @@ export default function SignIn() {
       <motion.div
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="text-7xl"
+        className="w-[60%] max-w-[220px]"
       >
-        ✨
+        <Image
+          src="/logos/anymon.png"
+          alt="anyMon!"
+          width={440}
+          height={220}
+          priority
+          className="h-auto w-full object-contain"
+        />
       </motion.div>
-      <h1 className="mt-4 text-5xl font-bold">anymon</h1>
-      <p className="mt-2 text-center text-white/90">
+      <p className="mt-4 text-center text-white/90">
         turn real objects into 3d monsters.
         <br />
         battle. learn. collect.

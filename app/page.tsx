@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import { useSession } from "next-auth/react";
 import ScannerView from "@/components/ScannerView";
 import DeckView from "@/components/DeckView";
@@ -12,11 +13,13 @@ import {
   apiList,
   apiMe,
   apiNearby,
+  apiPresence,
   apiSeed,
   getPosition,
   reverseGeocode,
   type Anymon,
   type MeResponse,
+  type NearbyTrainer,
   type Player,
   type Position,
 } from "@/lib/client";
@@ -32,6 +35,8 @@ export default function Home() {
   const [tab, setTab] = useState<Tab>("scanner");
   const [anymons, setAnymons] = useState<Anymon[]>([]);
   const [nearby, setNearby] = useState<NearbyAnymon[]>([]);
+  const [trainers, setTrainers] = useState<NearbyTrainer[]>([]);
+  const [inviteRoomId, setInviteRoomId] = useState<string | null>(null);
   const [booted, setBooted] = useState(false);
   const posRef = useRef<Position | null>(null);
 
@@ -64,6 +69,14 @@ export default function Home() {
       } catch {
         /* noop */
       }
+      try {
+        // Upsert our presence + discover nearby trainers and any PvP invite.
+        const presence = await apiPresence(cur);
+        setTrainers(presence.trainers);
+        setInviteRoomId(presence.invite?.roomId ?? null);
+      } catch {
+        /* noop */
+      }
     }
   }, []);
 
@@ -93,10 +106,10 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player?.id]);
 
-  // Keep coins + radar fresh.
+  // Keep coins + radar + presence/invites fresh.
   useEffect(() => {
     if (!player) return;
-    const id = setInterval(refresh, 15000);
+    const id = setInterval(refresh, 8000);
     return () => clearInterval(id);
   }, [player, refresh]);
 
@@ -114,13 +127,17 @@ export default function Home() {
   return (
     <main className="flex min-h-[100dvh] w-full justify-center bg-anymon-ink">
       <div className="relative h-[100dvh] w-full max-w-md overflow-hidden bg-anymon-cloud shadow-2xl">
-        {tab === "scanner" && (
+        {tab === "scanner" && player && (
           <ScannerView
             pos={pos}
             place={place}
             nearby={nearby}
             deck={anymons}
+            player={player}
+            trainers={trainers}
+            inviteRoomId={inviteRoomId}
             onRefresh={refresh}
+            onInviteHandled={() => setInviteRoomId(null)}
           />
         )}
         {tab === "deck" && player && (
@@ -141,8 +158,15 @@ export default function Home() {
 
 function Splash() {
   return (
-    <div className="flex h-[100dvh] w-full items-center justify-center bg-gradient-to-b from-anymon-ocean to-anymon-lime text-white">
-      <div className="animate-bob text-6xl">✨</div>
+    <div className="flex h-[100dvh] w-full flex-col items-center justify-center gap-6 bg-gradient-to-b from-anymon-ocean to-anymon-lime text-white">
+      <Image
+        src="/logos/anymon.png"
+        alt="anyMon!"
+        width={440}
+        height={220}
+        priority
+        className="h-auto w-[60%] max-w-[220px] object-contain animate-bob"
+      />
     </div>
   );
 }

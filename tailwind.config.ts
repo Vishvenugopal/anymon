@@ -10,9 +10,16 @@ const config: Config = {
       colors: {
         anymon: {
           white: "#FFFFFF",
-          lime: "#32CD32",
-          ocean: "#00BFFF",
-          ink: "#0b1f24",
+          // fun, punchy lime green (was a blue-ish #32CD32)
+          lime: "#8BE01E",
+          // deeper lime used for hard offset shadows / pressed states
+          limedark: "#5CA30F",
+          // de-emphasized secondary blue
+          ocean: "#3FB0D6",
+          // Persona-5 style accent
+          berry: "#FF3B53",
+          // near-black for chunky borders + text
+          ink: "#0a1418",
           cloud: "#f3fbf4",
         },
       },
@@ -21,8 +28,12 @@ const config: Config = {
         retro: ["Doto", "ui-monospace", "monospace"],
       },
       boxShadow: {
-        gummy: "0 10px 0 0 rgba(0,0,0,0.08), 0 14px 30px -6px rgba(0,191,255,0.35)",
-        "gummy-lime": "0 8px 0 0 #228B22, 0 16px 26px -8px rgba(50,205,50,0.55)",
+        gummy: "0 8px 0 0 rgba(0,0,0,0.85), 0 14px 24px -8px rgba(0,0,0,0.45)",
+        "gummy-lime": "0 8px 0 0 #5CA30F, 0 14px 22px -8px rgba(139,224,30,0.45)",
+        // hard, angular offset shadows for the retro / Persona look
+        retro: "4px 4px 0 0 #0a1418",
+        "retro-lg": "6px 6px 0 0 #0a1418",
+        "retro-berry": "5px 5px 0 0 #FF3B53",
       },
       borderRadius: {
         gummy: "2rem",

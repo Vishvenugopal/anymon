@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { motion } from "framer-motion";
 import { signOut } from "next-auth/react";
 import AnymonCanvas from "./AnymonCanvas";
@@ -11,6 +12,11 @@ import {
   type Position,
 } from "@/lib/client";
 import { MAX_DECK, MAX_WILD } from "@/lib/types";
+
+/** Render a player's display name as "Trainer X" (casing preserved via .preserve-case). */
+export function trainerName(name: string): string {
+  return `Trainer ${name}`;
+}
 
 function AnymonCard({
   a,
@@ -37,40 +43,63 @@ function AnymonCard({
   };
 
   return (
-    <motion.div layout className="card-gummy overflow-hidden">
-      <div className="h-36 w-full bg-anymon-cloud">
-        <AnymonCanvas
-          glbUrl={a.status === "ready" ? a.glbUrl : null}
-          spriteFallback={a.spriteDataUri}
-          className="h-full w-full"
-        />
-      </div>
-      <div className="p-3">
-        <div className="flex items-center justify-between">
-          <div className="font-bold">{a.name}</div>
-          <div className="font-retro text-xs text-yellow-600">{a.coins}¢</div>
+    <motion.div
+      layout
+      className="overflow-hidden rounded-xl border-2 border-anymon-ink bg-anymon-ink p-1.5 shadow-retro"
+    >
+      {/* Title bar: name + element/type badge */}
+      <div className="flex items-center justify-between gap-2 px-1.5 pb-1.5 pt-1">
+        <div className="truncate font-retro text-sm font-bold uppercase tracking-wide text-anymon-white">
+          {a.name}
         </div>
-        <div className="text-[11px] text-anymon-ink/60">
-          {a.city}, {a.country}
+        <span className="type-badge shrink-0">{a.object}</span>
+      </div>
+
+      {/* Framed art window wrapping the 3D canvas */}
+      <div className="relative rounded-md border-2 border-anymon-ink bg-anymon-cloud">
+        <div className="h-36 w-full overflow-hidden rounded-[3px]">
+          <AnymonCanvas
+            glbUrl={a.status === "ready" ? a.glbUrl : null}
+            spriteFallback={a.spriteDataUri}
+            className="h-full w-full"
+          />
         </div>
         {a.status !== "ready" && (
-          <div className="mt-1 text-[11px] text-anymon-ocean">incubating…</div>
-        )}
-        {a.state === "deck" ? (
-          <button
-            onClick={release}
-            disabled={busy}
-            className="gummy-btn mt-2 w-full bg-anymon-lime py-2 text-sm shadow-gummy-lime disabled:opacity-60"
-          >
-            {busy ? "releasing…" : "release to wild"}
-          </button>
-        ) : (
-          <div className="mt-2 w-full rounded-full bg-anymon-ocean/15 py-2 text-center text-sm font-semibold text-anymon-ocean">
-            farming in the wild
+          <div className="absolute left-1.5 top-1.5 rounded border border-anymon-ink bg-anymon-berry px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-anymon-white">
+            incubating…
           </div>
         )}
-        {err && <div className="mt-1 text-[11px] text-red-500">{err}</div>}
       </div>
+
+      {/* Stats strip: coins + location */}
+      <div className="mt-1.5 flex items-center justify-between gap-2 rounded-md border-2 border-anymon-ink bg-anymon-white px-2 py-1">
+        <div className="truncate text-[10px] font-semibold text-anymon-ink/70">
+          {a.city}, {a.country}
+        </div>
+        <div className="shrink-0 font-retro text-xs font-bold text-amber-600">
+          {a.coins}¢
+        </div>
+      </div>
+
+      {/* Footer action */}
+      {a.state === "deck" ? (
+        <button
+          onClick={release}
+          disabled={busy}
+          className="retro-btn mt-1.5 w-full bg-anymon-lime py-1.5 text-xs"
+        >
+          {busy ? "releasing…" : "release to wild"}
+        </button>
+      ) : (
+        <div className="mt-1.5 w-full rounded-lg border-2 border-anymon-ink bg-anymon-ocean/20 py-1.5 text-center text-xs font-bold uppercase tracking-wide text-anymon-ocean">
+          farming in the wild
+        </div>
+      )}
+      {err && (
+        <div className="mt-1 text-center text-[10px] font-semibold text-anymon-berry">
+          {err}
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -94,10 +123,17 @@ export default function DeckView({
     <div className="no-scrollbar h-full overflow-y-auto bg-anymon-cloud p-4 pb-24">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <div className="font-retro text-xs tracking-widest text-anymon-ocean">
-            your collection
+          <Image
+            src="/logos/deck.png"
+            alt="deck"
+            width={440}
+            height={180}
+            priority
+            className="mb-1 h-auto w-[60%] max-w-[180px] object-contain"
+          />
+          <div className="preserve-case text-2xl font-bold">
+            {trainerName(player.name)}
           </div>
-          <div className="text-2xl font-bold">@{player.name}</div>
           <button
             onClick={() => signOut()}
             className="text-xs text-anymon-ink/40 underline-offset-2 hover:underline"
@@ -105,9 +141,11 @@ export default function DeckView({
             sign out
           </button>
         </div>
-        <div className="rounded-gummy bg-white px-4 py-2 text-right shadow-gummy">
-          <div className="font-retro text-lg text-yellow-600">{totalCoins}¢</div>
-          <div className="text-[10px] text-anymon-ink/50">coins</div>
+        <div className="retro-panel px-4 py-2 text-right">
+          <div className="font-retro text-lg font-bold text-amber-600">
+            {totalCoins}¢
+          </div>
+          <div className="text-[10px] font-semibold text-anymon-ink/50">coins</div>
         </div>
       </div>
 
