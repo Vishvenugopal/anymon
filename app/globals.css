@@ -64,11 +64,16 @@ textarea {
       disabled:opacity-60;
   }
 
-  /* Small element / type badge (Pokemon "type" chip). */
+  /* Small object-type label chip. This is low-priority background info, so it is
+     a slightly FADED shade of the card's red (#E24040) — not the action green —
+     so it never reads like a tappable button.
+     Shadow: no x-offset, downward only, a darker faded card-red (never black). */
   .type-badge {
-    @apply inline-flex items-center gap-1 rounded-gummy border-2 border-anymon-edgelime
-      bg-anymon-lime px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide
-      text-anymon-ink shadow-[1px_1px_0_0_#4E8F2C];
+    @apply inline-flex items-center gap-1 rounded-gummy border-2 px-2 py-0.5
+      text-[10px] font-bold uppercase tracking-wide text-white;
+    border-color: rgba(178, 54, 71, 0.6); /* faded edgecard */
+    background-color: rgba(226, 64, 64, 0.55); /* faded card red (#E24040) */
+    box-shadow: 0 1px 0 0 rgba(140, 43, 56, 0.7); /* darker faded card-red */
   }
 }
 
@@ -122,10 +127,11 @@ textarea {
 }
 
 .scanner-scanline {
+  /* Much more transparent green sweep (was 0.9 alpha — very heavy). */
   background: linear-gradient(
     to bottom,
     transparent,
-    rgba(139, 224, 30, 0.9),
+    rgba(139, 224, 30, 0.16),
     transparent
   );
   height: 22%;
@@ -151,10 +157,12 @@ textarea {
     linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 30%),
     linear-gradient(160deg, #ef5e5e 0%, #e24040 48%, #b8323f 100%);
   border: 2px solid #b23647;
+  /* Drop shadow: no x-offset, downward only, darker edgecard (#B23647 -> #8C2B38),
+     never black. Inset highlight/shading layers stay for the foil depth. */
   box-shadow:
     inset 0 2px 0 rgba(255, 255, 255, 0.5),
     inset 0 -5px 10px rgba(120, 20, 30, 0.45),
-    0 5px 10px -6px rgba(10, 20, 24, 0.5);
+    0 5px 10px -6px #8c2b38;
   transform-style: preserve-3d;
 }
 
@@ -218,4 +226,106 @@ textarea {
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* ---- Deck card: rarity stars (top-left of the white art window) ---- */
+.card-stars {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  z-index: 10;
+  display: flex;
+  gap: 1px;
+  pointer-events: none;
+}
+.card-star {
+  font-size: 11px;
+  line-height: 1;
+  color: #ffc83d; /* classic gold */
+  /* glossy depth: y-only highlight + a darker-gold edge (never black). */
+  text-shadow:
+    0 1px 0 #9c6a00,
+    0 0 2px rgba(255, 220, 120, 0.85);
+}
+
+/* ---- Roaming "won N battles" notice ---- */
+.win-notice {
+  display: block;
+  text-align: center;
+  border-radius: 0.7rem;
+  border: 1px solid #9c6a00;
+  background: #ffe8a8;
+  color: #6b4a00;
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  box-shadow: 0 1px 0 0 #9c6a00; /* y-only darker gold */
+}
+
+/* ---- Floating "+XX$" reward effect that rises off a card and fades ---- */
+.coin-pop {
+  position: absolute;
+  top: 38%;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  text-align: center;
+  font-family: "Doto", ui-monospace, monospace;
+  font-weight: 900;
+  font-size: 1.4rem;
+  color: #d97706; /* coin amber */
+  text-shadow: 0 1px 0 #92400e; /* y-only darker amber, never black */
+  pointer-events: none;
+}
+
+/* ---- Coins counter panel: border tinted to match the coin text color ---- */
+.coins-counter {
+  border-radius: 1rem;
+  border: 2px solid #b45309; /* edgecoin (amber-700) ~ coin text */
+  background: #ffffff;
+  box-shadow: 0 3px 0 0 #92400e; /* y-only darker amber, never black */
+}
+
+/* ---- Captured-ghost alert item ---- */
+.captured-alert {
+  border-radius: 1rem;
+  border: 2px solid #c42a46; /* edgeberry */
+  background: #fff1f3;
+  box-shadow: 0 3px 0 0 #9e2138; /* y-only darker berry */
+}
+
+/* ---- Deck explainer / deploy-confirm modal ---- */
+.deck-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(10, 20, 24, 0.55);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+.deck-modal {
+  width: 100%;
+  max-width: 320px;
+  border-radius: 1rem;
+  border: 2px solid #b23647; /* edgecard */
+  background: #ffffff;
+  padding: 1rem 1rem 0.85rem;
+  box-shadow: 0 6px 0 0 #8c2b38; /* y-only darker card-red, never black */
+}
+
+/* ---- Trainer name (Doto): bigger, dark faded red, tighter letter-spacing ---- */
+.trainer-name {
+  font-family: "Doto", ui-monospace, monospace;
+  font-weight: 900;
+  font-size: 2rem;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: #8c2b38; /* dark, faded reddish */
+  text-transform: none; /* preserve "Trainer X" casing */
 }

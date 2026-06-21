@@ -1,8 +1,9 @@
 import { creativeName, identifyAndName } from "./claude";
 import { generateAnymonSprite } from "./gemini";
 import { create3D, get3D, is3DMock, provider } from "./threed";
+import { isRasterImage } from "./meshy";
 import { placeholderSprite, sampleGlb } from "./placeholder";
-import type { Anymon } from "./types";
+import { rarityMaxHp, rollRarity, type Anymon } from "./types";
 
 // The IMAGE half (object label + 2D sprite) is mocked when its keys are absent
 // or MOCK_PIPELINE=1. The 3D half is handled separately by the threed provider.
@@ -27,6 +28,9 @@ export interface CaptureInput {
  */
 export async function runCapture(input: CaptureInput): Promise<Anymon> {
   const id = crypto.randomUUID();
+  // Roll rarity once at capture (weighted so 4-5 stars are rare) and derive HP.
+  const rarity = rollRarity();
+  const maxHp = rarityMaxHp(rarity);
   const base: Omit<Anymon, "object" | "name" | "spriteDataUri" | "meshyTaskId"> = {
     id,
     ownerId: input.ownerId,
@@ -41,6 +45,12 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
     lng: input.lng,
     createdAt: Date.now(),
     deployedAt: null,
+    rarity,
+    maxHp,
+    hp: maxHp,
+    pendingWins: 0,
+    pendingCoins: 0,
+    capturedBy: null,
   };
 
   // 1) object label + creative name + 2) 2D sprite
@@ -67,19 +77,43 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
     }
   }
 
-  // 3) kick off 3D (mock if no provider configured)
+  // 3) kick off 3D. Sentinels for meshyTaskId:
+  //   "mock"   -> intentional no-keys demo path (resolveGlb serves a sample GLB)
+  //   "hfspace"-> a background job will fill glbUrl (handled by the capture route)
+  //   "failed" -> a REAL provider was configured but we can't make a model; we do
+  //               NOT swap in a random sample GLB — the Anymon resolves to "failed"
+  //   <id>     -> a real provider task id to poll
+  const spriteIsRaster = isRasterImage(sprite);
   let meshyTaskId = "mock";
-  if (!is3DMock()) {
-    if (provider() === "hfspace") {
-      // Generation is started as a background job by the capture route (it needs
-      // the saved Anymon id). Just flag it here; fall back to mock without a token.
-      meshyTaskId = process.env.HF_TOKEN ? "hfspace" : "mock";
+  if (is3DMock()) {
+    meshyTaskId = "mock"; // demo path: sample GLB is expected, not a bug
+  } else if (!spriteIsRaster) {
+    // The sprite is the SVG placeholder (Gemini failed or image-mock). Sending it
+    // to a real 3D provider would 400, and faking a sample model is exactly the
+    // placeholder bug. Mark it failed and log why.
+    console.error(
+      `[pipeline] ${id}: no raster sprite to send to ${provider()} (sprite fell ` +
+        `back to the SVG placeholder — usually an invalid GEMINI_API_KEY). ` +
+        `Marking 3D as failed instead of serving a random sample model.`,
+    );
+    meshyTaskId = "failed";
+  } else if (provider() === "hfspace") {
+    if (process.env.HF_TOKEN) {
+      meshyTaskId = "hfspace";
     } else {
-      try {
-        meshyTaskId = await create3D(sprite);
-      } catch (e) {
-        console.error("create3D failed", e);
-      }
+      console.error("[pipeline] provider=hfspace but HF_TOKEN missing — marking failed");
+      meshyTaskId = "failed";
+    }
+  } else {
+    try {
+      meshyTaskId = await create3D(sprite);
+      console.log(`[pipeline] ${id}: ${provider()} task started -> ${meshyTaskId}`);
+    } catch (e) {
+      console.error(
+        `[pipeline] ${id}: create3D (${provider()}) failed -> marking 3D failed:`,
+        (e as Error).message,
+      );
+      meshyTaskId = "failed";
     }
   }
 
@@ -102,12 +136,16 @@ export async function resolveGlb(
     return { status: "ready", glbUrl: a.glbUrl, progress: 100 };
   }
 
-  // HF Space: a background job updates the Anymon directly. We just report
-  // progress here, and hand back a sample model if that job failed.
+  // A real provider genuinely could not produce a model. Surface it as failed
+  // rather than silently serving a random sample GLB (the placeholder bug). The
+  // 2D sprite still renders via spriteFallback; the UI can offer a retry.
+  if (a.meshyTaskId === "failed" || a.status === "failed") {
+    return { status: "failed", glbUrl: null, progress: 100 };
+  }
+
+  // HF Space: a background job updates the Anymon directly (failure flips status
+  // to "failed", handled above). Here we just report incubation progress.
   if (a.meshyTaskId === "hfspace") {
-    if (a.status === "failed") {
-      return { status: "ready", glbUrl: sampleGlb(hash(a.id)), progress: 100 };
-    }
     const elapsed = Date.now() - a.createdAt;
     return {
       status: "incubating",
@@ -116,6 +154,7 @@ export async function resolveGlb(
     };
   }
 
+  // Intentional demo path only (no provider / MOCK_PIPELINE): a sample GLB is OK.
   if (!a.meshyTaskId || a.meshyTaskId === "mock" || is3DMock()) {
     const elapsed = Date.now() - a.createdAt;
     if (elapsed >= MOCK_INCUBATE_MS) {

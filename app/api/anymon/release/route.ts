@@ -21,13 +21,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "not your anymon" }, { status: 403 });
     }
     if (anymon.state === "wild") {
-      return NextResponse.json({ ok: false, error: "already in the wild" }, { status: 409 });
+      return NextResponse.json({ ok: false, error: "already roaming" }, { status: 409 });
     }
 
     const wildCount = await store.countByState(user.id, "wild");
     if (wildCount >= MAX_WILD) {
       return NextResponse.json(
-        { ok: false, error: `wild is full (max ${MAX_WILD})` },
+        { ok: false, error: `roaming is full (max ${MAX_WILD})` },
         { status: 409 },
       );
     }

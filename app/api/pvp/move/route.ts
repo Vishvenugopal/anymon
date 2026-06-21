@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { effectivenessLabel, resolveMove } from "@/lib/pvp";
+import { recordCaptureNotice } from "@/lib/economy";
 import {
   MAX_DECK,
   PVP_COINS_AWARDED,
@@ -80,11 +81,12 @@ export async function POST(req: Request) {
       if (defender.hp <= 0) {
         const winner = attacker;
         const loser = defender;
-        // coins to the winner's fighter
+        // coins to the winner's fighter (+ pending "+$" tally for the UI effect)
         const wAny = await store.getAnymon(winner.anymonId);
         if (wAny) {
           await store.updateAnymon(winner.anymonId, {
             coins: wAny.coins + PVP_COINS_AWARDED,
+            pendingCoins: (wAny.pendingCoins ?? 0) + PVP_COINS_AWARDED,
           });
         }
         // capture the loser's fighter if there's deck room
@@ -92,6 +94,8 @@ export async function POST(req: Request) {
         const loserAny = await store.getAnymon(loser.anymonId);
         if (loserAny && loserAny.ownerId === loser.userId) {
           const deckCount = await store.countByState(winner.userId, "deck");
+          // Notify the original owner before ownership transfers.
+          await recordCaptureNotice(store, loserAny, winner.username);
           await store.geoRemove(loser.anymonId).catch(() => {});
           await store.updateAnymon(loser.anymonId, {
             ownerId: winner.userId,

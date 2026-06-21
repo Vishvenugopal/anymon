@@ -261,6 +261,9 @@ export default function ScannerView({
           heading={heading}
           busyWildId={battlingId}
           busyTrainerId={challengingId}
+          // Suppress AR nameplates/buttons while any full-screen modal is open
+          // (capture/incubating, wild battle, PvP) so they don't bleed over it.
+          showOverlays={!capture && !battle && !pvpRoomId}
           onEngageWild={startBattle}
           onChallengeTrainer={challengeTrainer}
         />
@@ -361,7 +364,7 @@ type Blip = { id: string; brg: number; distM: number; kind: "wild" | "trainer" }
 
 function MiniRadar({ blips, heading }: { blips: Blip[]; heading: number | null }) {
   return (
-    <div className="pointer-events-none absolute right-4 top-16 z-20 h-24 w-24">
+    <div className="pointer-events-none absolute right-4 top-28 z-20 h-32 w-32">
       <div className="relative h-full w-full rounded-full border border-anymon-lime/40 bg-black/40 backdrop-blur-sm">
         <div className="absolute inset-[22%] rounded-full border border-anymon-lime/20" />
         {/* you (always center, facing up) */}

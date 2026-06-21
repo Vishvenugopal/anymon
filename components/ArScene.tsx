@@ -6,6 +6,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
@@ -97,7 +98,7 @@ function depthCues(distM: number) {
   const t = clamp(distM, 0, NEARBY_RADIUS_M) / NEARBY_RADIUS_M; // 0 near .. 1 far
   return {
     height: THREE.MathUtils.lerp(1.8, 0.55, t), // noticeable scale range
-    opacity: THREE.MathUtils.lerp(1, 0.55, t),
+    opacity: 1, // models/sprites stay fully opaque (distance read via size+lift)
     lift: THREE.MathUtils.lerp(0.55, 1.15, t), // far ones sit higher (horizon)
   };
 }
@@ -215,11 +216,13 @@ function WildEntity({
   wild,
   bearing,
   busy,
+  showOverlays,
   onEngage,
 }: {
   wild: ArWild;
   bearing: number;
   busy: boolean;
+  showOverlays: boolean;
   onEngage: (id: string) => void;
 }) {
   const [x, z] = placeXZ(bearing, wild.distM);
@@ -253,20 +256,30 @@ function WildEntity({
             sprite
           )}
         </Suspense>
-        <Html position={[0, lift + height + 0.4, 0]} center distanceFactor={9} occlude={false}>
-          <div className="pointer-events-auto flex select-none flex-col items-center gap-1">
-            <button
-              onClick={() => onEngage(wild.id)}
-              disabled={busy}
-              className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-ink shadow-retro disabled:opacity-60"
-            >
-              {busy ? "…" : "capture"}
-            </button>
-            <div className="whitespace-nowrap rounded-gummy bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] text-anymon-white">
-              {wild.name} · {wild.distM}m
+        {showOverlays && (
+          <Html
+            position={[0, lift + height + 0.4, 0]}
+            center
+            distanceFactor={9}
+            occlude={false}
+            // Positive z-index floor keeps nameplates above the 3D canvas, but
+            // low enough that full-screen modals (raised z-index) still win.
+            zIndexRange={[40, 20]}
+          >
+            <div className="pointer-events-auto flex select-none flex-col items-center gap-1">
+              <button
+                onClick={() => onEngage(wild.id)}
+                disabled={busy}
+                className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-ink shadow-retro disabled:opacity-60"
+              >
+                {busy ? "…" : "capture"}
+              </button>
+              <div className="whitespace-nowrap rounded-gummy bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] text-anymon-white">
+                {wild.name} · {wild.distM}m
+              </div>
             </div>
-          </div>
-        </Html>
+          </Html>
+        )}
       </group>
     </group>
   );
@@ -313,11 +326,13 @@ function TrainerEntity({
   trainer,
   bearing,
   busy,
+  showOverlays,
   onChallenge,
 }: {
   trainer: ArTrainer;
   bearing: number;
   busy: boolean;
+  showOverlays: boolean;
   onChallenge: (userId: string) => void;
 }) {
   const [x, z] = placeXZ(bearing, trainer.distM);
@@ -328,37 +343,127 @@ function TrainerEntity({
           <TrainerModel />
         </ModelErrorBoundary>
       </Suspense>
-      <Html position={[0, 2.2, 0]} center distanceFactor={9} occlude={false}>
-        <div className="pointer-events-auto flex select-none flex-col items-center gap-1">
-          <button
-            onClick={() => onChallenge(trainer.userId)}
-            disabled={busy}
-            className="rounded-gummy border-2 border-anymon-edgeberry bg-anymon-berry px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-white shadow-retro-berry disabled:opacity-60"
-          >
-            {busy ? "…" : "challenge"}
-          </button>
-          <div className="whitespace-nowrap rounded-gummy bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] text-anymon-white">
-            Trainer {trainer.username} · {trainer.distM}m
+      {showOverlays && (
+        <Html
+          position={[0, 2.2, 0]}
+          center
+          distanceFactor={9}
+          occlude={false}
+          zIndexRange={[40, 20]}
+        >
+          <div className="pointer-events-auto flex select-none flex-col items-center gap-1">
+            <button
+              onClick={() => onChallenge(trainer.userId)}
+              disabled={busy}
+              className="rounded-gummy border-2 border-anymon-edgeberry bg-anymon-berry px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-white shadow-retro-berry disabled:opacity-60"
+            >
+              {busy ? "…" : "challenge"}
+            </button>
+            <div className="whitespace-nowrap rounded-gummy bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] text-anymon-white">
+              Trainer {trainer.username} · {trainer.distM}m
+            </div>
           </div>
-        </div>
-      </Html>
+        </Html>
+      )}
     </group>
   );
 }
 
-// Rotates the world group toward the live compass heading (smoothed).
+// Live device orientation, self-contained inside the AR scene so objects feel
+// anchored to the real world as the phone pans. Exposes refs (read each frame
+// to avoid re-rendering on every sensor tick):
+//   headingRef  -> compass heading in degrees (0=N, clockwise) or null
+//   pitchRef    -> phone tilt offset in radians (0 when held upright)
+// On iOS, DeviceOrientationEvent.requestPermission() must be triggered by a
+// user gesture, so we request it once on the first tap/touch anywhere.
+function useDeviceOrientation() {
+  const headingRef = useRef<number | null>(null);
+  const pitchRef = useRef(0);
+  const [active, setActive] = useState(false);
+  const activeRef = useRef(false);
+
+  useEffect(() => {
+    const onOrient = (
+      e: DeviceOrientationEvent & { webkitCompassHeading?: number },
+    ) => {
+      // --- heading (yaw) ---
+      let h: number | null = null;
+      if (typeof e.webkitCompassHeading === "number") h = e.webkitCompassHeading;
+      else if (typeof e.alpha === "number") h = 360 - e.alpha;
+      if (h != null && !Number.isNaN(h)) {
+        headingRef.current = ((h % 360) + 360) % 360;
+      }
+      // --- pitch (look up/down) --- beta≈90 means phone held vertical/upright,
+      // which we treat as the neutral (0) tilt. Clamp so you can't flip over.
+      if (typeof e.beta === "number" && !Number.isNaN(e.beta)) {
+        pitchRef.current = degToRad(clamp(e.beta - 90, -55, 55));
+      }
+      if (!activeRef.current) {
+        activeRef.current = true;
+        setActive(true);
+      }
+    };
+
+    window.addEventListener("deviceorientation", onOrient, true);
+    // Absolute variant (when available) gives a true compass-referenced yaw.
+    // Not in the standard WindowEventMap, so cast the listener.
+    window.addEventListener(
+      "deviceorientationabsolute",
+      onOrient as EventListener,
+      true,
+    );
+
+    // One-time iOS permission request on the first user gesture. Falls back
+    // silently (existing behavior) if denied or unsupported.
+    let detachGesture = () => {};
+    const D = window.DeviceOrientationEvent as unknown as {
+      requestPermission?: () => Promise<"granted" | "denied">;
+    };
+    const requestPermission = D?.requestPermission;
+    if (typeof requestPermission === "function") {
+      const requestOnce = () => {
+        requestPermission.call(D).catch(() => {});
+        detachGesture();
+      };
+      window.addEventListener("pointerdown", requestOnce, { once: true });
+      window.addEventListener("touchend", requestOnce, { once: true });
+      detachGesture = () => {
+        window.removeEventListener("pointerdown", requestOnce);
+        window.removeEventListener("touchend", requestOnce);
+      };
+    }
+
+    return () => {
+      window.removeEventListener("deviceorientation", onOrient, true);
+      window.removeEventListener(
+        "deviceorientationabsolute",
+        onOrient as EventListener,
+        true,
+      );
+      detachGesture();
+    };
+  }, []);
+
+  return { headingRef, pitchRef, active };
+}
+
+// Rotates the world group toward the live compass heading (smoothed). Prefers
+// the scene's own orientation sensor; falls back to the heading prop.
 function HeadingGroup({
-  heading,
+  headingRef,
+  fallbackHeading,
   children,
 }: {
-  heading: number | null;
+  headingRef: React.RefObject<number | null>;
+  fallbackHeading: number | null;
   children: ReactNode;
 }) {
   const ref = useRef<THREE.Group>(null);
-  const target = heading == null ? 0 : degToRad(heading);
   useFrame((_, delta) => {
     const g = ref.current;
     if (!g) return;
+    const h = headingRef.current ?? fallbackHeading;
+    const target = h == null ? 0 : degToRad(h);
     // Shortest-path lerp around the circle.
     let diff = target - g.rotation.y;
     while (diff > Math.PI) diff -= Math.PI * 2;
@@ -368,11 +473,18 @@ function HeadingGroup({
   return <group ref={ref}>{children}</group>;
 }
 
-function CameraTilt() {
+// Tilts the camera to look slightly down at the floor, plus the live device
+// pitch so panning the phone up/down moves the world (smoothed to kill jitter).
+function CameraRig({ pitchRef }: { pitchRef: React.RefObject<number> }) {
   const { camera } = useThree();
-  useEffect(() => {
-    camera.rotation.x = -0.16; // look slightly down at the floor
-  }, [camera]);
+  useFrame((_, delta) => {
+    const target = -0.16 + (pitchRef.current ?? 0);
+    camera.rotation.x = THREE.MathUtils.lerp(
+      camera.rotation.x,
+      target,
+      clamp(delta * 4, 0, 1),
+    );
+  });
   return null;
 }
 
@@ -382,6 +494,7 @@ export default function ArScene({
   heading,
   busyWildId,
   busyTrainerId,
+  showOverlays = true,
   onEngageWild,
   onChallengeTrainer,
   className = "",
@@ -391,12 +504,21 @@ export default function ArScene({
   heading: number | null;
   busyWildId: string | null;
   busyTrainerId: string | null;
+  // Hide the drei <Html> nameplates/buttons while a full-screen modal (capture/
+  // incubating, wild battle, or PvP) is open so they don't bleed over it.
+  showOverlays?: boolean;
   onEngageWild: (id: string) => void;
   onChallengeTrainer: (userId: string) => void;
   className?: string;
 }) {
-  // With no compass, spread everything across a frontal arc so it's all visible.
-  const noCompass = heading == null;
+  // The scene tracks the device's own orientation so Anymon stay world-anchored
+  // as the phone pans (yaw) and tilts (pitch). Falls back to the heading prop.
+  const { headingRef, pitchRef, active: orientationActive } =
+    useDeviceOrientation();
+
+  // With no compass at all, spread everything across a frontal arc so it's all
+  // visible; once any orientation source is live we use real bearings instead.
+  const noCompass = heading == null && !orientationActive;
   const wildBearings = noCompass ? frontalBearings(wild.length) : null;
   const trainerBearings = noCompass ? frontalBearings(trainers.length) : null;
 
@@ -408,13 +530,13 @@ export default function ArScene({
         dpr={[1, 2]}
         style={{ pointerEvents: "none" }}
       >
-        <CameraTilt />
+        <CameraRig pitchRef={pitchRef} />
         <ambientLight intensity={0.85} />
         <hemisphereLight intensity={0.5} groundColor="#bfe9ff" />
         <directionalLight position={[4, 8, 5]} intensity={1.3} castShadow />
         <directionalLight position={[-4, 3, -3]} intensity={0.4} color="#8BE01E" />
 
-        <HeadingGroup heading={heading}>
+        <HeadingGroup headingRef={headingRef} fallbackHeading={heading}>
           <ContactShadows
             position={[0, 0.01, 0]}
             scale={40}
@@ -429,6 +551,7 @@ export default function ArScene({
               wild={w}
               bearing={wildBearings ? wildBearings[i] : w.bearing}
               busy={busyWildId === w.id}
+              showOverlays={showOverlays}
               onEngage={onEngageWild}
             />
           ))}
@@ -438,6 +561,7 @@ export default function ArScene({
               trainer={t}
               bearing={trainerBearings ? trainerBearings[i] : t.bearing}
               busy={busyTrainerId === t.userId}
+              showOverlays={showOverlays}
               onChallenge={onChallengeTrainer}
             />
           ))}

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
-import { getMovesFor } from "@/lib/moves";
+import { getMovesFor, scaleMovesByRarity } from "@/lib/moves";
 import { judgeMatchup } from "@/lib/claude";
 import { getCurrentUser } from "@/lib/auth-helpers";
-import { BASE_HP } from "@/lib/types";
+import { clampRarity, rarityMaxHp } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -44,15 +44,23 @@ export async function POST(req: Request) {
       judgeMatchup(attacker.object, defender.object),
     ]);
 
-    const pack = (a: typeof attacker, moves: typeof aMoves) => ({
-      id: a.id,
-      name: a.name,
-      object: a.object,
-      spriteDataUri: a.spriteDataUri,
-      glbUrl: a.glbUrl,
-      maxHp: BASE_HP,
-      moves,
-    });
+    // Scale HP + move power by rarity so rarer Anymon are stronger. maxHp is the
+    // battle's starting/cap HP; hp is the stored current HP (for healed/hurt UI).
+    const pack = (a: typeof attacker, moves: typeof aMoves) => {
+      const rarity = clampRarity(a.rarity ?? 1);
+      const maxHp = typeof a.maxHp === "number" ? a.maxHp : rarityMaxHp(rarity);
+      return {
+        id: a.id,
+        name: a.name,
+        object: a.object,
+        spriteDataUri: a.spriteDataUri,
+        glbUrl: a.glbUrl,
+        rarity,
+        maxHp,
+        hp: typeof a.hp === "number" ? a.hp : maxHp,
+        moves: scaleMovesByRarity(moves, rarity),
+      };
+    };
 
     return NextResponse.json({
       attacker: pack(attacker, aMoves),

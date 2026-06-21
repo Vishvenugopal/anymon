@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
-import { withLiveCoins } from "@/lib/economy";
+import { publicAnymon } from "@/lib/economy";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { NEARBY_RADIUS_M } from "@/lib/types";
 
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     const a = await store.getAnymon(hit.id);
     if (!a || a.state !== "wild") continue;
     anymons.push({
-      ...withLiveCoins(a),
+      ...publicAnymon(a),
       distM: Math.round(hit.distM),
       mine: a.ownerId === ownerId,
     });

@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
 import { placeholderSprite, sampleGlb } from "@/lib/placeholder";
-import { NEARBY_RADIUS_M, type Anymon } from "@/lib/types";
+import { NEARBY_RADIUS_M, rarityMaxHp, type Anymon } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+// Varied rarities so the UI shows a spread of stars (1-5) on the radar.
 const SEEDS = [
-  { object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA" },
-  { object: "waterbottle", name: "Aquaflask", owner: "comet-2b1c", city: "Tokyo", country: "Japan" },
-  { object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK" },
-  { object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France" },
+  { object: "book", name: "Tomeling", owner: "maple-7f3a", city: "Berkeley", country: "USA", rarity: 2 },
+  { object: "waterbottle", name: "Aquaflask", owner: "comet-2b1c", city: "Tokyo", country: "Japan", rarity: 5 },
+  { object: "umbrella", name: "Brellox", owner: "river-9d4e", city: "London", country: "UK", rarity: 3 },
+  { object: "lamp", name: "Lumosaur", owner: "nova-5a8b", city: "Paris", country: "France", rarity: 4 },
 ];
 
 function offset(lat: number, lng: number, meters: number, bearingDeg: number) {
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
     for (let i = 0; i < SEEDS.length; i++) {
       const s = SEEDS[i];
       const pos = offset(lat, lng, 25 + i * 15, i * 90);
+      const maxHp = rarityMaxHp(s.rarity);
       const a: Anymon = {
         id: crypto.randomUUID(),
         object: s.object,
@@ -56,6 +58,12 @@ export async function POST(req: Request) {
         lng: pos.lng,
         createdAt: Date.now(),
         deployedAt: Date.now() - (i + 1) * 120000,
+        rarity: s.rarity,
+        maxHp,
+        hp: maxHp,
+        pendingWins: 0,
+        pendingCoins: 0,
+        capturedBy: null,
       };
       await store.saveAnymon(a);
       await store.geoAdd(a.id, pos.lng, pos.lat);

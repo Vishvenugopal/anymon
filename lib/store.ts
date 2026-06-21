@@ -17,6 +17,8 @@ export interface Store {
   saveAnymon(a: Anymon): Promise<void>;
   getAnymon(id: string): Promise<Anymon | null>;
   updateAnymon(id: string, patch: Partial<Anymon>): Promise<Anymon | null>;
+  /** Permanently remove an Anymon (used to dismiss capture-notice ghosts). */
+  deleteAnymon(id: string): Promise<void>;
   listByOwner(ownerId: string): Promise<Anymon[]>;
   countByState(ownerId: string, state: AnymonState): Promise<number>;
   allAnymons(): Promise<Anymon[]>;
@@ -108,6 +110,10 @@ class MemoryStore implements Store {
     const next = { ...cur, ...patch };
     this.anymons.set(id, next);
     return next;
+  }
+  async deleteAnymon(id: string) {
+    this.anymons.delete(id);
+    this.geo.delete(id);
   }
   async listByOwner(ownerId: string) {
     return [...this.anymons.values()].filter((a) => a.ownerId === ownerId);
@@ -240,6 +246,15 @@ class RedisStore implements Store {
     }
     await this.redis.set(KEY.anymon(id), JSON.stringify(next));
     return next;
+  }
+  async deleteAnymon(id: string) {
+    const cur = await this.getAnymon(id);
+    const pipe = this.redis.pipeline();
+    pipe.del(KEY.anymon(id));
+    pipe.srem(KEY.all, id);
+    if (cur) pipe.srem(KEY.owner(cur.ownerId), id);
+    pipe.zrem(KEY.geo, id);
+    await pipe.exec();
   }
   async listByOwner(ownerId: string) {
     const ids = await this.redis.smembers(KEY.owner(ownerId));

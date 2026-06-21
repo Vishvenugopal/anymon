@@ -31,13 +31,12 @@ export default function BottomNav({
         }`}
       >
         <span
-          className={`text-2xl transition-transform ${
-            active ? "-translate-y-0.5 scale-110" : ""
+          className={`text-3xl transition-transform ${
+            active ? "-translate-y-0.5 scale-110 -rotate-12" : ""
           }`}
         >
           {t.icon}
         </span>
-        <span className="font-retro text-[10px] tracking-wider">{t.label}</span>
         {t.id === "scanner" && nearbyCount > 0 && (
           <span className="absolute right-1 top-0 rounded-full bg-anymon-ocean px-1.5 text-[10px] text-white">
             {nearbyCount}

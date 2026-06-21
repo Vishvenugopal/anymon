@@ -33,13 +33,16 @@ export default function SignIn() {
   };
 
   return (
-    <div className="flex h-full w-full flex-col bg-gradient-to-b from-anymon-ocean to-anymon-lime text-white">
+    <div className="relative flex h-full w-full flex-col bg-[#FBF6F3] text-anymon-ink">
+      {/* Match the main app screens: cream base + the rising red dot field. */}
+      <div className="deck-dots-red pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[36%]" />
+
       {/* Logo is pinned in a non-shrinking header so it's ALWAYS visible. */}
-      <div className="flex shrink-0 justify-center px-8 pb-2 pt-12">
+      <div className="relative z-10 flex shrink-0 justify-center px-8 pb-2 pt-12">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="w-[60%] max-w-[220px]"
+          className="w-[75%] max-w-[300px]"
         >
           <Image
             src="/logos/anymon.png"
@@ -52,11 +55,12 @@ export default function SignIn() {
         </motion.div>
       </div>
 
-      <div className="no-scrollbar flex flex-1 flex-col items-center justify-center overflow-y-auto px-8 pb-10">
-        <p className="text-center text-white/90">
-          turn real objects into 3d monsters.
-          <br />
-          battle. learn. collect.
+      <div className="no-scrollbar relative z-10 flex flex-1 flex-col items-center justify-center overflow-y-auto px-8 pb-10">
+        <h1 className="preserve-case text-center text-2xl font-bold text-anymon-ink">
+          Turn any object into an Anymon!
+        </h1>
+        <p className="preserve-case mt-2 text-center text-sm text-anymon-ink/60">
+          Learn science while collecting and fighting anymon!
         </p>
 
         <div className="mt-10 w-full max-w-xs space-y-3">
@@ -71,14 +75,14 @@ export default function SignIn() {
         <button
           onClick={() => go("guest")}
           disabled={!!busy}
-          className="w-full rounded-full py-2 text-sm text-white/80 underline-offset-2 hover:underline disabled:opacity-60"
+          className="w-full rounded-full py-2 text-sm text-anymon-ink/60 underline-offset-2 hover:underline disabled:opacity-60"
         >
           {busy === "guest" ? "entering…" : "continue as guest"}
         </button>
         </div>
 
         {error && (
-          <div className="mt-4 rounded-full bg-anymon-berry px-4 py-2 text-sm">
+          <div className="mt-4 rounded-full bg-anymon-berry px-4 py-2 text-sm text-anymon-white">
             {error}
           </div>
         )}

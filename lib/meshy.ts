@@ -9,12 +9,27 @@ function authHeaders() {
   };
 }
 
+// Meshy needs a RASTER image (PNG/JPEG/WEBP), either a public URL or a data URI.
+// An SVG data URI (our placeholder sprite) makes Meshy 400, so we reject it
+// before spending a request — the pipeline should never get here with an SVG.
+export function isRasterImage(image: string): boolean {
+  if (/^https?:\/\//i.test(image)) return true; // assume hosted raster
+  const m = image.match(/^data:([^;]+);base64,/);
+  if (!m) return false;
+  return /^image\/(png|jpe?g|webp)$/i.test(m[1]);
+}
+
 /**
  * Submit an Image-to-3D task. `image` may be a public URL or a base64 data URI
  * (Meshy accepts data URIs directly, so Gemini output needs no hosting).
  * Returns the Meshy task id.
  */
 export async function createImageTo3D(image: string): Promise<string> {
+  if (!isRasterImage(image)) {
+    throw new Error(
+      "Meshy requires a raster image (PNG/JPEG/WEBP); refusing to send a non-raster input (e.g. SVG placeholder).",
+    );
+  }
   const res = await fetch(`${BASE}/image-to-3d`, {
     method: "POST",
     headers: authHeaders(),
@@ -26,9 +41,12 @@ export async function createImageTo3D(image: string): Promise<string> {
     }),
   });
   if (!res.ok) {
-    throw new Error(`Meshy create failed: ${res.status} ${await res.text()}`);
+    const body = await res.text();
+    console.error(`[meshy] create failed: ${res.status} ${body}`);
+    throw new Error(`Meshy create failed: ${res.status} ${body}`);
   }
   const data = (await res.json()) as { result: string };
+  console.log(`[meshy] image-to-3d task created: ${data.result}`);
   return data.result;
 }
 

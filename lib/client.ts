@@ -35,6 +35,40 @@ export function getPosition(): Promise<Position> {
   });
 }
 
+// Common long official country names -> short, card-friendly labels.
+const COUNTRY_ALIASES: Record<string, string> = {
+  "united states of america (the)": "USA",
+  "united states of america": "USA",
+  "united states": "USA",
+  "united kingdom of great britain and northern ireland (the)": "UK",
+  "united kingdom of great britain and northern ireland": "UK",
+  "united kingdom": "UK",
+  "united arab emirates (the)": "UAE",
+  "united arab emirates": "UAE",
+  "russian federation (the)": "Russia",
+  "russian federation": "Russia",
+  "korea (the republic of)": "South Korea",
+  "republic of korea": "South Korea",
+  "korea, republic of": "South Korea",
+  "netherlands (the)": "Netherlands",
+  "the netherlands": "Netherlands",
+  "czech republic (the)": "Czechia",
+  "philippines (the)": "Philippines",
+  "dominican republic (the)": "Dominican Rep.",
+  "tanzania, united republic of": "Tanzania",
+  "viet nam": "Vietnam",
+};
+
+/** Shortens long official country names for cards (e.g. "…of America (the)" -> "USA"). */
+export function shortCountry(name: string | undefined | null): string {
+  if (!name) return "Earth";
+  const key = name.trim().toLowerCase();
+  if (COUNTRY_ALIASES[key]) return COUNTRY_ALIASES[key];
+  // Drop a trailing "(the)" and any parenthetical, then trim.
+  const cleaned = name.replace(/\s*\(.*?\)\s*$/g, "").trim();
+  return cleaned || name;
+}
+
 export async function reverseGeocode(
   pos: Position,
 ): Promise<{ city: string; country: string }> {
@@ -49,7 +83,7 @@ export async function reverseGeocode(
     };
     return {
       city: data.city || data.locality || "Somewhere",
-      country: data.countryName || "Earth",
+      country: shortCountry(data.countryName),
     };
   } catch {
     return { city: "Somewhere", country: "Earth" };
@@ -92,6 +126,8 @@ export async function apiSetUsername(
 export interface CaptureResult {
   id: string;
   object: string;
+  name: string; // creative name (e.g. "Brellox") — display this on the hatch screen
+  rarity: number; // 1-5 stars
   spriteDataUri: string;
   meshyTaskId: string | null;
   ownerName: string;
@@ -148,6 +184,50 @@ export async function apiRelease(
   return res.json();
 }
 
+/** Bring a ROAMING Anymon back into the deck (respects MAX_DECK). */
+export async function apiRecall(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/anymon/recall", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  return res.json();
+}
+
+/** Pay coins to fully heal a hurt Anymon. Returns the cost paid + new HP. */
+export async function apiHeal(id: string): Promise<{
+  ok: boolean;
+  error?: string;
+  healed?: number;
+  cost?: number;
+  hp?: number;
+  coins?: number;
+}> {
+  const res = await fetch("/api/anymon/heal", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  return res.json();
+}
+
+/**
+ * Acknowledge/clear a notification on an Anymon: clears the pendingWins/+$ tally
+ * on a roaming Anymon, or dismisses a state==="captured" notice ghost.
+ */
+export async function apiAcknowledge(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/anymon/notify", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  return res.json();
+}
+
 // ---- Turn-based battle ----
 export interface Combatant {
   id: string;
@@ -155,7 +235,9 @@ export interface Combatant {
   object: string;
   spriteDataUri: string;
   glbUrl: string | null;
-  maxHp: number;
+  rarity: number; // 1-5 stars (HP + move power already scaled server-side)
+  maxHp: number; // rarity-scaled max/starting HP
+  hp: number; // stored current HP (maxHp unless hurt from a prior battle)
   moves: Move[];
 }
 

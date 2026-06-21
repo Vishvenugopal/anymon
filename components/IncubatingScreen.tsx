@@ -52,7 +52,7 @@ export default function IncubatingScreen({
       <div className="mb-2 font-retro text-sm tracking-widest">
         {ready ? "hatched!" : "incubating..."}
       </div>
-      <div className="mb-1 text-2xl font-bold">{capture.object}-mon</div>
+      <div className="mb-1 text-2xl font-bold">{capture.name}</div>
       <div className="preserve-case mb-6 text-sm opacity-80">
         {trainerName(capture.ownerName)}
       </div>

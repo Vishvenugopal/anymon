@@ -1,14 +1,20 @@
-import { getMovesFor } from "./moves";
+import { getMovesFor, scaleMovesByRarity } from "./moves";
 import type { Anymon, BattleFighter, Move } from "./types";
-import { PVP_BASE_HP } from "./types";
+import { clampRarity, rarityMaxHp } from "./types";
 
-/** Build a server-authoritative fighter (with cached moves + full HP). */
+/**
+ * Build a server-authoritative fighter (cached moves + full HP). HP and move
+ * power are scaled by the Anymon's rarity so rarer creatures are stronger in
+ * PvP exactly like in single-player.
+ */
 export async function buildFighter(
   a: Anymon,
   userId: string,
   username: string,
 ): Promise<BattleFighter> {
   const moves = await getMovesFor(a);
+  const rarity = clampRarity(a.rarity ?? 1);
+  const maxHp = typeof a.maxHp === "number" ? a.maxHp : rarityMaxHp(rarity);
   return {
     userId,
     username,
@@ -17,9 +23,10 @@ export async function buildFighter(
     object: a.object,
     spriteDataUri: a.spriteDataUri,
     glbUrl: a.glbUrl,
-    maxHp: PVP_BASE_HP,
-    hp: PVP_BASE_HP,
-    moves,
+    rarity,
+    maxHp,
+    hp: maxHp,
+    moves: scaleMovesByRarity(moves, rarity),
   };
 }
 
@@ -48,8 +55,8 @@ export function resolveMove(move: Move, effectiveness: number): MoveResult {
 }
 
 export function effectivenessLabel(mult: number): string {
-  if (mult >= 2) return "super effective!";
-  if (mult >= 1.5) return "effective!";
-  if (mult <= 0.5) return "not very effective…";
+  if (mult >= 2) return "very effective";
+  if (mult >= 1.5) return "effective";
+  if (mult <= 0.5) return "not very effective";
   return "";
 }

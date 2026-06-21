@@ -33,6 +33,13 @@ const config: Config = {
           edgecard: "#B23647",
           // for dark/ink panels: a deep cool teal-black (not pure black)
           edgeink: "#04222a",
+          // ---- coins (amber) ----
+          // coin text color + a darker amber "edge" for the counter border/shadow
+          // so the counter outline reads as a tint of its own text (design rule).
+          coin: "#D97706",
+          edgecoin: "#B45309",
+          // dark, faded card-red used for emphasis text (e.g. "Trainer X")
+          cardink: "#8C2B38",
         },
       },
       fontFamily: {
@@ -40,13 +47,18 @@ const config: Config = {
         retro: ["Doto", "ui-monospace", "monospace"],
       },
       boxShadow: {
-        // subtler gummy depth (smaller offset + tighter blur, tinted to ink)
-        gummy: "0 4px 0 0 rgba(10,20,24,0.55), 0 8px 14px -8px rgba(10,20,24,0.35)",
-        "gummy-lime": "0 4px 0 0 #4E8F2C, 0 8px 12px -8px rgba(139,224,30,0.4)",
-        // hard, angular offset shadows for the retro / Persona look (smaller)
-        retro: "3px 3px 0 0 #04222a",
-        "retro-lg": "4px 4px 0 0 #04222a",
-        "retro-berry": "3px 3px 0 0 #C42A46",
+        // NOTE (design rule): every shadow has NO horizontal offset (x = 0) and a
+        // downward (positive y) offset only. Shadow color is never black — it is a
+        // DARKER shade of the element's own edge/outline token.
+        // gummy: default white/cloud card -> darker edgecloud (#C2D5CC).
+        gummy: "0 4px 0 0 #93AEA2, 0 8px 14px -8px #6E8A7E",
+        // gummy-lime: lime element -> darker edgelime (#4E8F2C).
+        "gummy-lime": "0 4px 0 0 #3C6E22, 0 8px 12px -8px #3C6E22",
+        // retro: ink/default panels -> darker edgeink (#04222a).
+        retro: "0 3px 0 0 #02161b",
+        "retro-lg": "0 4px 0 0 #02161b",
+        // retro-berry: berry element -> darker edgeberry (#C42A46).
+        "retro-berry": "0 3px 0 0 #9E2138",
       },
       borderRadius: {
         // single standardized app-wide corner radius (cards opt out -> sharp)

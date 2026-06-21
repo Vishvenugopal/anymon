@@ -33,12 +33,14 @@ export const IDENTIFY_AND_NAME_PROMPT = [
 // ---- Matchup reasoning (the "weakness initialization") ----
 export const MATCHUP_SYSTEM_PROMPT = [
   "You are the type-matchup engine for Anymon, an educational monster-battler.",
-  "Two creatures based on REAL-WORLD objects are about to battle. Using real physics,",
-  "chemistry, biology, or materials science, decide how effective each one is against the",
-  "other. Effectiveness is a damage multiplier in {0.5, 1, 1.5, 2}: 2 = super effective,",
-  "1.5 = effective, 1 = neutral, 0.5 = resisted. Give a short, true reason for each direction.",
+  "Two creatures based on REAL-WORLD objects are about to battle. Use real physics,",
+  "chemistry, biology, or materials science to decide how effective each one is against",
+  "the other. Effectiveness is a damage multiplier in {0.5, 1, 1.5, 2}: 2 = very effective,",
+  "1.5 = effective, 1 = neutral, 0.5 = resisted.",
+  "Each reason must be PLAIN and SCIENTIFICALLY ACCURATE: one short factual cause-and-effect",
+  "clause. No flowery adjectives, no metaphors, no hype — just what happens and why.",
   "Respond with ONLY a JSON object (no markdown fences) EXACTLY:",
-  '{"intro":"<<=12 word punchy weakness-initialization line>","field":"<physics|chemistry|biology|materials>","aToB":{"multiplier":<0.5|1|1.5|2>,"reason":"<<=14 word real reason A beats/loses to B>"},"bToA":{"multiplier":<0.5|1|1.5|2>,"reason":"<<=14 word real reason B beats/loses to A>"}}',
+  '{"intro":"<<=10 word plain summary of the matchup>","field":"<physics|chemistry|biology|materials>","aToB":{"multiplier":<0.5|1|1.5|2>,"reason":"<<=14 word plain factual reason A vs B>"},"bToA":{"multiplier":<0.5|1|1.5|2>,"reason":"<<=14 word plain factual reason B vs A>"}}',
 ].join(" ");
 
 export function matchupUserPrompt(aObject: string, bObject: string): string {
@@ -46,12 +48,14 @@ export function matchupUserPrompt(aObject: string, bObject: string): string {
 }
 
 export const BATTLE_SYSTEM_PROMPT = [
-  "You are the Game Master for Anymon, an educational AR monster-battler for curious kids and teens.",
-  "Two Anymons, each based on a real-world object, are battling. Decide the winner using REAL-WORLD logic:",
-  "physics, chemistry, biology, materials science, or history. Account for any location buff provided.",
-  "Be scientifically accurate but playful. The lesson must teach something true and memorable.",
+  "You are the battle engine for Anymon, an educational monster-battler.",
+  "Two Anymons, each based on a real-world object, are battling. Decide the winner using",
+  "REAL-WORLD science: physics, chemistry, biology, materials science, or geography.",
+  "Account for any location buff provided.",
+  "Be accurate and plain. The lesson states the real cause and effect in one or two short,",
+  "factual sentences a 12-year-old understands. No flowery language, no metaphors, no hype.",
   "Respond with ONLY a JSON object, no markdown fences, matching exactly:",
-  '{"winner":"A"|"B","headline":"<<=8 word punchy line>","lesson":"<1-2 sentence real-world explanation a 12-year-old understands>","field":"<one of: physics, chemistry, biology, materials, history, geography>"}',
+  '{"winner":"A"|"B","headline":"<<=8 word plain line>","lesson":"<1-2 short factual sentences>","field":"<one of: physics, chemistry, biology, materials, history, geography>"}',
 ].join(" ");
 
 export function battleUserPrompt(args: {
@@ -65,18 +69,17 @@ export function battleUserPrompt(args: {
 
 // ---- Move generation (turn-based, Pokemon-style) ----
 export const MOVES_SYSTEM_PROMPT = [
-  "You design a moveset for a creature in Anymon, an educational monster-battler.",
-  "The creature is based on a REAL-WORLD object. Invent exactly 4 battle moves that come",
-  "from that object's true physical properties, materials, uses, or science.",
-  "Make them fun and punchy like Pokemon moves.",
-  "Vary the moves: include strong/risky ones (high power, lower accuracy), reliable ones,",
-  "and at least one 'status' move (buff/defense/heal-ish, power can be 0).",
-  "The blurb must be SUPER SIMPLE: 3-6 easy words a 7-year-old understands, plain language",
-  "saying what the move does. Keep the real-world idea but say it the easy way",
-  '(e.g. "splashes water to put out fire", "heavy metal smash", "blocks the next hit").',
-  "No jargon, no formulas, no big words.",
+  "You design a 4-move moveset for a creature in Anymon, an educational monster-battler.",
+  "The creature is based on a REAL-WORLD object. Each move must come from that object's real",
+  "physical or chemical properties, materials, or common use.",
+  "Keep names short and clear. Vary the set: one reliable attack, one high-power lower-accuracy",
+  "attack, and at least one 'status' move (defense/heal, power may be 0).",
+  "The blurb must be PLAIN and SCIENTIFICALLY ACCURATE: one short factual phrase stating the",
+  "real cause and effect (what happens and why). No flowery adjectives, no metaphors, no hype.",
+  'Good blurbs: "water absorbs heat and cools the target", "dense metal transfers high impact force",',
+  '"smooth surface deflects the blow", "stiffens to absorb the next hit".',
   "Respond with ONLY a JSON array (no markdown fences) of 4 objects, each EXACTLY:",
-  '{"name":"<<=18 chars>","power":<integer 0-40>,"accuracy":<integer 70-100>,"kind":"physical"|"special"|"status","emoji":"<1 emoji>","blurb":"<3-6 simple words, what it does>"}',
+  '{"name":"<<=18 chars>","power":<integer 0-40>,"accuracy":<integer 70-100>,"kind":"physical"|"special"|"status","emoji":"<1 emoji>","blurb":"<short plain factual cause and effect>"}',
 ].join(" ");
 
 export function movesUserPrompt(object: string): string {

@@ -240,10 +240,10 @@ function sanitizeMoves(raw: unknown, object: string): Move[] {
 export function fallbackMoves(object: string): Move[] {
   const o = object || "anymon";
   return [
-    { name: "Tackle", power: 18, accuracy: 100, kind: "physical", emoji: "💥", blurb: `a quick body bump` },
-    { name: "Slam", power: 30, accuracy: 80, kind: "physical", emoji: "🔨", blurb: `big heavy smash` },
-    { name: "Quirk Beam", power: 25, accuracy: 90, kind: "special", emoji: "🌈", blurb: `${o} power blast` },
-    { name: "Brace", power: 0, accuracy: 100, kind: "status", emoji: "🛡️", blurb: `blocks the next hit` },
+    { name: "Tackle", power: 18, accuracy: 100, kind: "physical", emoji: "💥", blurb: `solid body delivers blunt impact force` },
+    { name: "Slam", power: 30, accuracy: 80, kind: "physical", emoji: "🔨", blurb: `heavy mass increases impact damage` },
+    { name: "Quirk Beam", power: 25, accuracy: 90, kind: "special", emoji: "⚡", blurb: `${o} releases concentrated energy at the target` },
+    { name: "Brace", power: 0, accuracy: 100, kind: "status", emoji: "🛡️", blurb: `stiffens to absorb the next hit` },
   ];
 }
 
@@ -278,10 +278,10 @@ function parseBattle(
     if (parsed.winner === "A" || parsed.winner === "B") {
       return {
         winner: parsed.winner,
-        headline: parsed.headline || "a worthy clash!",
+        headline: parsed.headline || "close match",
         lesson:
           parsed.lesson ||
-          `The ${args.aObject} and ${args.bObject} tested their real-world properties.`,
+          `The ${args.aObject} and ${args.bObject} were decided by their material properties.`,
         field: parsed.field || "physics",
       };
     }
@@ -291,8 +291,8 @@ function parseBattle(
   // Heuristic fallback so battles never hard-fail.
   return {
     winner: Math.random() < 0.5 ? "A" : "B",
-    headline: "a close call!",
-    lesson: `When a ${args.aObject} meets a ${args.bObject}, their material properties decide the day.`,
+    headline: "close match",
+    lesson: `When a ${args.aObject} meets a ${args.bObject}, their material properties decide the result.`,
     field: "physics",
   };
 }
@@ -334,30 +334,30 @@ export function heuristicMatchup(aObject: string, bObject: string): Matchup {
   const B = tagsOf(bObject);
   const dir = (atk: Set<string>, def: Set<string>, a: string, b: string): MatchupDir => {
     if (atk.has("water") && def.has("fire"))
-      return { multiplier: 2, reason: `the ${a}'s water smothers the ${b}'s flame.` };
+      return { multiplier: 2, reason: `water from the ${a} absorbs heat and puts out the ${b}'s fire.` };
     if (atk.has("water") && def.has("electric"))
-      return { multiplier: 1.5, reason: `water from the ${a} conducts and shorts the ${b}.` };
+      return { multiplier: 1.5, reason: `water from the ${a} conducts current and shorts the ${b}.` };
     if (atk.has("fire") && def.has("plant"))
-      return { multiplier: 2, reason: `the ${a}'s heat scorches the ${b}'s fibers.` };
+      return { multiplier: 2, reason: `heat from the ${a} burns the ${b}'s dry fibers.` };
     if (atk.has("fire") && def.has("water"))
-      return { multiplier: 0.5, reason: `the ${b}'s water quenches the ${a}'s heat.` };
+      return { multiplier: 0.5, reason: `the ${b}'s water absorbs the ${a}'s heat and resists burning.` };
     if (atk.has("metal") && def.has("fragile"))
-      return { multiplier: 2, reason: `hard metal of the ${a} shatters the brittle ${b}.` };
+      return { multiplier: 2, reason: `the hard metal ${a} cracks the brittle ${b}.` };
     if (atk.has("soft") && def.has("metal"))
-      return { multiplier: 0.5, reason: `the soft ${a} can't dent the rigid ${b}.` };
+      return { multiplier: 0.5, reason: `the soft ${a} cannot dent the rigid ${b}.` };
     if (atk.has("electric") && def.has("water"))
-      return { multiplier: 1.5, reason: `the ${a}'s current arcs through the wet ${b}.` };
-    return { multiplier: 1, reason: `the ${a} and ${b} trade even blows — material vs material.` };
+      return { multiplier: 1.5, reason: `current from the ${a} passes through the wet ${b}.` };
+    return { multiplier: 1, reason: `the ${a} and ${b} are similar materials and trade even impacts.` };
   };
   const aToB = dir(A, B, aObject, bObject);
   const bToA = dir(B, A, bObject, aObject);
   const lead =
     aToB.multiplier > bToA.multiplier
-      ? `${aObject} has the edge`
+      ? `${aObject} has the advantage`
       : bToA.multiplier > aToB.multiplier
-        ? `${bObject} has the edge`
+        ? `${bObject} has the advantage`
         : "an even matchup";
-  return { intro: `weakness initialized — ${lead}!`, field: "materials", aToB, bToA };
+  return { intro: `${lead}.`, field: "materials", aToB, bToA };
 }
 
 /** One cached call at battle start: effectiveness multipliers + reasons. */

@@ -55,6 +55,8 @@ export async function POST(req: Request) {
     return NextResponse.json({
       id: anymon.id,
       object: anymon.object,
+      name: anymon.name, // creative name (e.g. "Brellox") — shown on the hatch screen
+      rarity: anymon.rarity,
       spriteDataUri: anymon.spriteDataUri,
       meshyTaskId: anymon.meshyTaskId,
       ownerName: anymon.ownerName,

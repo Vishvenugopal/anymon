@@ -22,9 +22,12 @@ export default function UsernameSetup({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="flex h-full w-full flex-col bg-anymon-cloud">
+    <div className="relative flex h-full w-full flex-col bg-[#FBF6F3] text-anymon-ink">
+      {/* Same background as the sign-in screen: cream base + rising red dot field. */}
+      <div className="deck-dots-red pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[36%]" />
+
       {/* Logo pinned at the top so it stays visible on small screens. */}
-      <div className="flex shrink-0 justify-center px-8 pb-2 pt-10">
+      <div className="relative z-10 flex shrink-0 justify-center px-8 pb-2 pt-10">
         <Image
           src="/logos/anymon.png"
           alt="anyMon!"
@@ -35,13 +38,13 @@ export default function UsernameSetup({ onDone }: { onDone: () => void }) {
         />
       </div>
 
-      <div className="no-scrollbar flex flex-1 items-center justify-center overflow-y-auto p-8 pt-2">
+      <div className="no-scrollbar relative z-10 flex flex-1 items-center justify-center overflow-y-auto p-8 pt-2">
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         className="card-gummy w-full max-w-sm p-6 text-center"
       >
-        <div className="text-5xl">🎫</div>
+        <TicketIcon className="mx-auto h-12 w-12 text-anymon-berry" />
         <h2 className="mt-3 text-2xl font-bold">pick a username</h2>
         <p className="mt-1 text-sm text-anymon-ink/60">
           this is the creator name shown on every anymon you make.
@@ -49,14 +52,16 @@ export default function UsernameSetup({ onDone }: { onDone: () => void }) {
 
         <form onSubmit={submit} className="mt-5">
           <div className="flex items-center rounded-full border-2 border-anymon-edgecloud bg-anymon-cloud px-4 py-3">
-            <span className="text-anymon-ink/40">@</span>
+            <span className="preserve-case shrink-0 font-bold text-anymon-ink/50">
+              Trainer
+            </span>
             <input
               autoFocus
               value={value}
               onChange={(e) => setValue(e.target.value.toLowerCase())}
               placeholder="ash_ketchum"
               maxLength={20}
-              className="ml-1 w-full bg-transparent outline-none"
+              className="ml-2 w-full bg-transparent outline-none"
             />
           </div>
           <div className="mt-1 text-left text-[11px] text-anymon-ink/40">
@@ -87,5 +92,25 @@ export default function UsernameSetup({ onDone }: { onDone: () => void }) {
       </motion.div>
       </div>
     </div>
+  );
+}
+
+// Flat ticket icon (replaces the 🎫 emoji). Uses currentColor so it picks up
+// the surrounding text color token.
+function TicketIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h15A1.5 1.5 0 0 1 21 8.5V10a2 2 0 0 0 0 4v1.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 15.5V14a2 2 0 0 0 0-4V8.5Z" />
+      <path d="M14 7v10" strokeDasharray="2 2" />
+    </svg>
   );
 }

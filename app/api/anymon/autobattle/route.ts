@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getStore } from "@/lib/store";
+import { ROAM_WIN_COINS } from "@/lib/economy";
 import { AUTO_BATTLE_CHANCE, NEARBY_RADIUS_M } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -27,12 +28,18 @@ export async function POST(req: Request) {
     if (Math.random() > AUTO_BATTLE_CHANCE) return NextResponse.json({ battles: 0 });
 
     const winner = Math.random() < 0.5 ? a : b;
-    await store.updateAnymon(winner.id, { coins: winner.coins + 3 });
+    // Record the roaming win: coins + a pending tally the deck shows as
+    // "won N battles / +$" the next time the owner opens their deck.
+    await store.updateAnymon(winner.id, {
+      coins: winner.coins + ROAM_WIN_COINS,
+      pendingWins: (winner.pendingWins ?? 0) + 1,
+      pendingCoins: (winner.pendingCoins ?? 0) + ROAM_WIN_COINS,
+    });
 
     return NextResponse.json({
       battles: 1,
       winner: winner.name,
-      headline: `${a.name} and ${b.name} skirmished in the wild`,
+      headline: `${a.name} and ${b.name} skirmished while roaming`,
     });
   } catch {
     return NextResponse.json({ battles: 0 });

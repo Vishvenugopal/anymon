@@ -8,7 +8,10 @@ export interface User {
 
 export const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
-export type AnymonState = "deck" | "wild";
+// "wild" == ROAMING (deployed out in the world). "captured" is a notice-only
+// ghost left behind for the original owner when another trainer captures their
+// roaming Anymon (never rendered as a deck/roaming card; UI reads it as an alert).
+export type AnymonState = "deck" | "wild" | "captured";
 export type IncubationStatus = "incubating" | "ready" | "failed";
 
 export const MAX_DECK = 5;
@@ -16,8 +19,44 @@ export const MAX_WILD = 5;
 export const NEARBY_RADIUS_M = 100;
 export const AUTO_BATTLE_CHANCE = 0.5;
 
-// Max HP every Anymon starts a battle with.
+// Base max HP for a 1-star Anymon. Higher rarity scales up from here.
 export const BASE_HP = 100;
+
+// ---- Rarity (1-5 stars; rarer = stronger) ----
+export const RARITY_MIN = 1;
+export const RARITY_MAX = 5;
+// Extra max HP granted per star above 1 (r1=100, r2=120 … r5=180).
+export const RARITY_HP_STEP = 20;
+
+/** Clamp + round any value into a valid 1-5 star rarity. */
+export function clampRarity(r: number | undefined | null): number {
+  if (!Number.isFinite(r as number)) return RARITY_MIN;
+  return Math.max(RARITY_MIN, Math.min(RARITY_MAX, Math.round(r as number)));
+}
+
+/** Max HP for a given rarity (used by both single-player and PvP battles). */
+export function rarityMaxHp(rarity: number, base = BASE_HP): number {
+  return base + (clampRarity(rarity) - 1) * RARITY_HP_STEP;
+}
+
+/** Move-power multiplier for a rarity (r1=1.0 … r5=1.4) so rarer hits harder. */
+export function rarityPowerMult(rarity: number): number {
+  return 1 + (clampRarity(rarity) - 1) * 0.1;
+}
+
+// Weighted draw so 4-5 stars are genuinely rare (sums to 100).
+export const RARITY_WEIGHTS: Record<number, number> = { 1: 50, 2: 28, 3: 14, 4: 6, 5: 2 };
+
+/** Weighted random rarity (1-5). 4 and 5 stars are uncommon. */
+export function rollRarity(): number {
+  const total = Object.values(RARITY_WEIGHTS).reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (let star = RARITY_MIN; star <= RARITY_MAX; star++) {
+    r -= RARITY_WEIGHTS[star];
+    if (r <= 0) return star;
+  }
+  return RARITY_MIN;
+}
 
 export type MoveKind = "physical" | "special" | "status";
 
@@ -48,12 +87,20 @@ export interface Anymon {
   lat: number | null;
   lng: number | null;
   createdAt: number;
-  deployedAt: number | null; // when released into the wild (for passive farming)
+  deployedAt: number | null; // when it started ROAMING (released into the wild)
   moves?: Move[]; // generated lazily from `object` on first battle, then cached
-}
 
-// Coins a deployed wild Anymon earns per minute.
-export const COINS_PER_MIN = 2;
+  // ---- Rarity + battle health (see rarityMaxHp / rarityPowerMult) ----
+  rarity: number; // 1-5 stars; rarer = more HP + stronger moves
+  maxHp: number; // derived from rarity, stored for convenient UI/battle reads
+  hp: number; // current HP; hp < maxHp means the Anymon is "hurt" (heal to restore)
+
+  // ---- Roaming notifications (read straight off the object in apiList) ----
+  pendingWins: number; // roaming auto-battle wins since the owner last acknowledged
+  pendingCoins: number; // coins won while roaming, pending the "+$" reward effect
+  // For state==="captured" ghosts only: who captured this roaming Anymon.
+  capturedBy?: string | null;
+}
 
 export interface GeoHit {
   id: string;
@@ -115,6 +162,7 @@ export interface BattleFighter {
   object: string;
   spriteDataUri: string;
   glbUrl: string | null;
+  rarity: number; // 1-5 stars (UI renders stars; HP + move power already scaled)
   maxHp: number;
   hp: number;
   moves: Move[];
