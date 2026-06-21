@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { useSession } from "next-auth/react";
 import ScannerView from "@/components/ScannerView";
@@ -40,10 +40,15 @@ export default function Home() {
   const [booted, setBooted] = useState(false);
   const posRef = useRef<Position | null>(null);
 
-  const player: Player | null =
-    me?.authenticated && me.id && me.username
-      ? { id: me.id, name: me.username }
-      : null;
+  // Memoized so its identity is stable across renders (otherwise a fresh object
+  // each render retriggers the effects that depend on `player`).
+  const player: Player | null = useMemo(
+    () =>
+      me?.authenticated && me.id && me.username
+        ? { id: me.id, name: me.username }
+        : null,
+    [me],
+  );
 
   const loadMe = useCallback(async () => {
     setMe(await apiMe());
@@ -181,14 +186,27 @@ function PhoneFrame({ children }: { children: React.ReactNode }) {
 
 function Splash() {
   return (
-    <div className="flex h-full w-full flex-col items-center justify-center gap-6 bg-gradient-to-b from-anymon-ocean to-anymon-lime text-white">
+    <div className="relative flex h-full w-full flex-col items-center justify-center gap-6 overflow-hidden bg-[#FBF6F3] text-anymon-ink">
+      {/* Match the sign-in screen: cream base + a rising lime/green dot field. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-0 h-[36%]"
+        style={{
+          backgroundImage: "radial-gradient(#8BE01E 1px, transparent 1.6px)",
+          backgroundSize: "6px 6px",
+          imageRendering: "pixelated",
+          WebkitMaskImage:
+            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 100%)",
+          maskImage:
+            "linear-gradient(to top, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 12%, rgba(0,0,0,0) 100%)",
+        }}
+      />
       <Image
         src="/logos/anymon.png"
         alt="anyMon!"
         width={440}
         height={220}
         priority
-        className="h-auto w-[60%] max-w-[220px] object-contain animate-bob"
+        className="relative z-10 h-auto w-[60%] max-w-[220px] object-contain animate-bob"
       />
     </div>
   );

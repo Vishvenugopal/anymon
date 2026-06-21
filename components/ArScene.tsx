@@ -267,9 +267,9 @@ function WildEntity({
             center
             distanceFactor={9}
             occlude={false}
-            // Positive z-index floor keeps nameplates above the 3D canvas, but
-            // low enough that full-screen modals (raised z-index) still win.
-            zIndexRange={[40, 20]}
+            // Sit above the 3D canvas but BELOW the scanner HUD (logo + radar at
+            // z-20) so nameplates/buttons never cover the logo or radar.
+            zIndexRange={[19, 6]}
           >
             <div className="pointer-events-auto flex select-none flex-col items-center gap-1">
               <button
@@ -296,7 +296,11 @@ function TrainerModel() {
   const cloned = useMemo(() => fbx.clone(true), [fbx]);
   const ref = useRef<THREE.Group>(null);
   const { actions, names } = useAnimations(cloned.animations ?? [], ref);
-  const { scale, center } = useAutoFit(cloned, 1.8);
+  // Trainers are human avatars, not Anymon — render them clearly TALLER than the
+  // wild creatures (max ~1.8) so players never confuse the two. Lift = height/2
+  // keeps the model's feet on the floor.
+  const TRAINER_HEIGHT = 2.6;
+  const { scale, center } = useAutoFit(cloned, TRAINER_HEIGHT);
 
   useEffect(() => {
     const first = names[0];
@@ -310,7 +314,11 @@ function TrainerModel() {
     <group ref={ref}>
       <group
         scale={scale}
-        position={[-center.x * scale, -center.y * scale + 0.9, -center.z * scale]}
+        position={[
+          -center.x * scale,
+          -center.y * scale + TRAINER_HEIGHT / 2,
+          -center.z * scale,
+        ]}
       >
         <primitive object={cloned} />
       </group>
@@ -320,8 +328,8 @@ function TrainerModel() {
 
 function TrainerFallback() {
   return (
-    <mesh position={[0, 0.9, 0]}>
-      <capsuleGeometry args={[0.35, 1.0, 4, 8]} />
+    <mesh position={[0, 1.3, 0]}>
+      <capsuleGeometry args={[0.5, 1.6, 4, 8]} />
       <meshStandardMaterial color="#3FB0D6" />
     </mesh>
   );
@@ -350,11 +358,11 @@ function TrainerEntity({
       </Suspense>
       {showOverlays && (
         <Html
-          position={[0, 2.2, 0]}
+          position={[0, 2.9, 0]}
           center
           distanceFactor={9}
           occlude={false}
-          zIndexRange={[40, 20]}
+          zIndexRange={[19, 6]}
         >
           <div className="pointer-events-auto flex select-none flex-col items-center gap-1">
             <button
@@ -384,6 +392,12 @@ function TrainerEntity({
 function useDeviceOrientation() {
   const headingRef = useRef<number | null>(null);
   const pitchRef = useRef(0);
+  // The phone's tilt the moment AR starts becomes the neutral (level) pose, so
+  // the floor sits where it does on a laptop (level with the camera) regardless
+  // of the angle the phone is actually held at — then tilting up/down from there
+  // pans the world. (Absolute device HEIGHT isn't available from sensors, but
+  // calibrating the rest tilt is what actually fixes "the floor looks too high".)
+  const restBetaRef = useRef<number | null>(null);
   const [active, setActive] = useState(false);
   const activeRef = useRef(false);
 
@@ -398,10 +412,11 @@ function useDeviceOrientation() {
       if (h != null && !Number.isNaN(h)) {
         headingRef.current = ((h % 360) + 360) % 360;
       }
-      // --- pitch (look up/down) --- beta≈90 means phone held vertical/upright,
-      // which we treat as the neutral (0) tilt. Clamp so you can't flip over.
+      // --- pitch (look up/down) --- calibrate the FIRST reading as neutral, then
+      // measure tilt relative to that rest pose. Clamp so you can't flip over.
       if (typeof e.beta === "number" && !Number.isNaN(e.beta)) {
-        pitchRef.current = degToRad(clamp(e.beta - 90, -55, 55));
+        if (restBetaRef.current == null) restBetaRef.current = e.beta;
+        pitchRef.current = degToRad(clamp(e.beta - restBetaRef.current, -55, 55));
       }
       if (!activeRef.current) {
         activeRef.current = true;

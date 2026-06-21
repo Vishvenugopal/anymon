@@ -70,37 +70,51 @@ function effLabel(mult: number): string {
   return "";
 }
 
-// Color the multiplier by VALUE: above 1x reads green (good), below 1x reads red
-// (bad), exactly 1x stays neutral.
-function multClass(mult: number): string {
-  if (mult > 1) return "text-anymon-edgelime";
-  if (mult < 1) return "text-anymon-berry";
-  return "text-anymon-ink/50";
+// Frame the matchup from YOUR (the player's) point of view as a single verdict:
+// compare how hard you hit the foe vs how hard the foe hits you, and label the
+// net edge ("major advantage" / "advantage" / "no advantage" / "disadvantage" /
+// "major disadvantage"). The dominant multiplier is shown in parentheses.
+function advantageState(
+  youMult: number,
+  foeMult: number,
+): { text: string; mult: number; tone: "good" | "bad" | "neutral" } {
+  if (youMult > foeMult)
+    return {
+      text: youMult >= 2 ? "major advantage" : "advantage",
+      mult: youMult,
+      tone: "good",
+    };
+  if (foeMult > youMult)
+    return {
+      text: foeMult >= 2 ? "major disadvantage" : "disadvantage",
+      mult: foeMult,
+      tone: "bad",
+    };
+  return { text: "no advantage", mult: youMult, tone: "neutral" };
 }
 
 /**
  * Persistent (non-toast) type-matchup box — sits just above the log, subtle.
- * Shows ONLY the advantage direction (the disadvantage is just its inverse), and
- * a single description that explains both the upside and downside together.
+ * Reads as a single player-POV verdict plus a description explaining both the
+ * upside and the downside together.
  */
-function WeaknessBox({
-  matchup,
-  youName,
-  foeName,
-}: {
-  matchup?: Matchup;
-  youName: string;
-  foeName: string;
-}) {
+function WeaknessBox({ matchup }: { matchup?: Matchup }) {
   if (!matchup) return null;
   const youToFoe = matchup.aToB;
   const foeToYou = matchup.bToA;
-  const youAdv = youToFoe.multiplier >= foeToYou.multiplier;
-  const adv = youAdv ? youToFoe : foeToYou;
-  const other = youAdv ? foeToYou : youToFoe;
-  const advFrom = youAdv ? youName : foeName;
-  const advTo = youAdv ? foeName : youName;
-  const desc = [adv.reason, other.reason]
+  const { text, mult, tone } = advantageState(
+    youToFoe.multiplier,
+    foeToYou.multiplier,
+  );
+  // A more vivid, readable leaf-green for advantages (the muddy edgelime read as
+  // washed-out); berry red for disadvantages; muted ink for an even matchup.
+  const toneClass =
+    tone === "good"
+      ? "text-[#34B814]"
+      : tone === "bad"
+        ? "text-anymon-berry"
+        : "text-anymon-ink/50";
+  const desc = [youToFoe.reason, foeToYou.reason]
     .filter(Boolean)
     .filter((r, i, a) => a.indexOf(r) === i)
     .join(" — ");
@@ -110,13 +124,11 @@ function WeaknessBox({
         <span>type matchup</span>
         {matchup.field && <span className="text-anymon-ocean">· {matchup.field}</span>}
       </div>
-      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1 text-[12px] leading-snug">
-        <span className="font-bold">{advFrom}</span>
-        <span className="text-anymon-ink/40">▸</span>
-        <span className="font-bold">{advTo}</span>
-        <span className={`font-retro ${multClass(adv.multiplier)}`}>
-          ×{adv.multiplier}
+      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[13px] leading-snug">
+        <span className={`font-retro uppercase tracking-wide ${toneClass}`}>
+          {text}
         </span>
+        <span className={`font-retro ${toneClass}`}>(×{mult})</span>
       </div>
       {desc && (
         <div className="mt-0.5 text-[11px] leading-snug text-anymon-ink/60">
@@ -425,37 +437,48 @@ export default function BattleScreen({
               onUserMediaError={() => setArOn(false)}
               className="absolute inset-0 h-full w-full object-cover"
             />
-            {/* soft scrim keeps the on-brand panels + models legible over video */}
-            <div className="absolute inset-0 bg-white/25" />
+            {/* Same green scanner screen-effects as the scanner page, layered
+                over the live camera (behind the cloud wash below). */}
+            <div className="absolute inset-0 scanner-overlay" />
+            <div className="absolute inset-0 scanner-pixels opacity-60" />
+            <div className="absolute inset-x-0 top-0 h-full overflow-hidden">
+              <div className="scanner-scanline w-full" />
+            </div>
+            {/* The non-AR background (cloud) overlaid at 30% so on-brand panels +
+                models stay legible while the camera/effects show through. */}
+            <div className="absolute inset-0 bg-anymon-cloud opacity-30" />
           </>
         ) : (
           <div className="absolute inset-0 bg-anymon-cloud" />
         )}
       </div>
 
-      {/* GIVE UP (forfeit + exit) — top-left, clear escape hatch */}
-      {phase !== "result" && (
+      {/* Top controls bar — in-flow (not absolute) so the enemy HP box sits
+          BELOW the give-up / AR-toggle buttons instead of under them. */}
+      <div className="relative z-30 flex items-start justify-between p-3">
+        {phase !== "result" ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              giveUp();
+            }}
+            className="rounded-gummy border-2 border-anymon-edgeberry bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-berry shadow-[0_2px_0_0_#9E2138] active:translate-y-[2px] active:shadow-none"
+          >
+            give up
+          </button>
+        ) : (
+          <span />
+        )}
         <button
           onClick={(e) => {
             e.stopPropagation();
-            giveUp();
+            setArOn((v) => !v);
           }}
-          className="absolute left-3 top-3 z-30 rounded-gummy border-2 border-anymon-edgeberry bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-berry shadow-[0_2px_0_0_#9E2138] active:translate-y-[2px] active:shadow-none"
+          className="rounded-gummy border-2 border-anymon-edgecloud bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-ink shadow-[0_2px_0_0_#C2D5CC] active:translate-y-[2px] active:shadow-none"
         >
-          give up
+          {arOn ? "ar: on" : "ar: off"}
         </button>
-      )}
-
-      {/* AR / non-AR toggle */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          setArOn((v) => !v);
-        }}
-        className="absolute right-3 top-3 z-30 rounded-gummy border-2 border-anymon-edgecloud bg-white/90 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-anymon-ink shadow-[0_2px_0_0_#C2D5CC] active:translate-y-[2px] active:shadow-none"
-      >
-        {arOn ? "ar: on" : "ar: off"}
-      </button>
+      </div>
 
       {/* ARENA — vertically balanced in the available space */}
       <div className="relative z-10 flex flex-1 flex-col justify-center gap-6 px-4 py-4">
@@ -494,7 +517,7 @@ export default function BattleScreen({
 
       {/* WEAKNESS + LOG + MENU */}
       <div className="relative z-10 p-3">
-        <WeaknessBox matchup={matchup} youName={attacker.name} foeName={defender.name} />
+        <WeaknessBox matchup={matchup} />
 
         <div className="mb-2 min-h-[4.25rem] rounded-gummy border-2 border-anymon-edgecloud bg-anymon-cloud p-3 text-sm text-anymon-ink shadow-gummy">
           {log}
@@ -506,7 +529,13 @@ export default function BattleScreen({
               {attacker.moves.map((m) => (
                 <button
                   key={m.name}
-                  onClick={() => playerTurn(m)}
+                  onClick={(e) => {
+                    // Stop the tap from bubbling to the screen's tap-to-advance
+                    // handler, which would otherwise instantly skip your own
+                    // move's 3s readout (the "my turn flashes by" bug).
+                    e.stopPropagation();
+                    playerTurn(m);
+                  }}
                   className={`flex flex-col gap-1 rounded-gummy border-2 px-3 py-2 text-left transition-transform select-none active:translate-y-[3px] active:shadow-none ${moveTileClass(
                     m.kind,
                   )}`}

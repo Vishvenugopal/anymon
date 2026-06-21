@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import AnymonCanvas from "./AnymonCanvas";
-import { trainerName } from "./DeckView";
 import { apiCaptureStatus, type CaptureResult } from "@/lib/client";
 
 export default function IncubatingScreen({
@@ -63,12 +62,11 @@ export default function IncubatingScreen({
         }}
       />
 
-      <div className="relative z-10 mb-2 font-retro text-sm tracking-widest text-anymon-lime">
+      <div className="relative z-10 mb-2 font-sans text-sm font-bold tracking-widest text-anymon-lime">
         {ready ? "hatched!" : "incubating..."}
       </div>
-      <div className="relative z-10 mb-1 text-2xl font-bold">{capture.name}</div>
-      <div className="preserve-case relative z-10 mb-6 text-sm text-anymon-ink/60">
-        {trainerName(capture.ownerName)}
+      <div className="relative z-10 mb-6 font-retro text-4xl tracking-tight">
+        {capture.name}
       </div>
 
       <motion.div

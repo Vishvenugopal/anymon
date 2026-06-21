@@ -56,10 +56,17 @@ export default function AnymonCanvas({
   glbUrl,
   spriteFallback,
   className = "",
+  active = true,
 }: {
   glbUrl: string | null;
   spriteFallback?: string;
   className?: string;
+  // When false, show the static 2D sprite instead of a live WebGL canvas. Each
+  // <Canvas> is its own WebGL context, and mobile browsers (esp. iOS Safari) cap
+  // simultaneous contexts at ~8 — exceeding it silently drops contexts so models
+  // render WHITE. Callers that show many models at once (the deck grid) keep
+  // most cards idle and only set active on the focused/hovered one.
+  active?: boolean;
 }) {
   const fallback = spriteFallback ? (
     // eslint-disable-next-line @next/next/no-img-element
@@ -74,7 +81,7 @@ export default function AnymonCanvas({
     </div>
   );
 
-  if (!glbUrl) return <div className={className}>{fallback}</div>;
+  if (!glbUrl || !active) return <div className={className}>{fallback}</div>;
 
   return (
     <div className={className}>

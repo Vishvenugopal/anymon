@@ -36,7 +36,11 @@ export async function createImageTo3D(image: string): Promise<string> {
     body: JSON.stringify({
       image_url: image,
       should_texture: true,
-      enable_pbr: true,
+      // No PBR: our renderer (AnymonCanvas) has no environment map, so PBR
+      // metallic/roughness maps can't reflect anything and only render darker —
+      // plus generating them adds time. A plain baseColor-textured GLB looks
+      // right with the basic lights and finishes faster.
+      enable_pbr: false,
       target_formats: ["glb"],
     }),
   });

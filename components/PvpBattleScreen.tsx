@@ -67,40 +67,55 @@ function RarityStars({ rarity }: { rarity: number }) {
   );
 }
 
-// Color the multiplier by VALUE: above 1x reads green (good), below 1x reads red
-// (bad), exactly 1x stays neutral.
-function multClass(mult: number): string {
-  if (mult > 1) return "text-anymon-edgelime";
-  if (mult < 1) return "text-anymon-berry";
-  return "text-anymon-ink/50";
+// Frame the matchup from YOUR point of view as a single verdict (mirrors the
+// wild BattleScreen): "major advantage" / "advantage" / "no advantage" /
+// "disadvantage" / "major disadvantage", with the dominant multiplier in parens.
+function advantageState(
+  youMult: number,
+  foeMult: number,
+): { text: string; mult: number; tone: "good" | "bad" | "neutral" } {
+  if (youMult > foeMult)
+    return {
+      text: youMult >= 2 ? "major advantage" : "advantage",
+      mult: youMult,
+      tone: "good",
+    };
+  if (foeMult > youMult)
+    return {
+      text: foeMult >= 2 ? "major disadvantage" : "disadvantage",
+      mult: foeMult,
+      tone: "bad",
+    };
+  return { text: "no advantage", mult: youMult, tone: "neutral" };
 }
 
 /**
  * Persistent (non-toast) type-matchup box — sits just above the log, subtle.
- * Shows ONLY the advantage direction (the disadvantage is just its inverse), and
- * a single description that explains both the upside and downside together.
+ * Reads as a single player-POV verdict plus a description explaining both the
+ * upside and the downside together.
  */
 function WeaknessBox({
   matchup,
   meIsChallenger,
-  youName,
-  foeName,
 }: {
   matchup: Matchup | null;
   meIsChallenger: boolean;
-  youName: string;
-  foeName: string;
 }) {
   if (!matchup) return null;
   // matchup.aToB = challenger -> opponent. Orient it from "me" to "foe".
   const youToFoe = meIsChallenger ? matchup.aToB : matchup.bToA;
   const foeToYou = meIsChallenger ? matchup.bToA : matchup.aToB;
-  const youAdv = youToFoe.multiplier >= foeToYou.multiplier;
-  const adv = youAdv ? youToFoe : foeToYou;
-  const other = youAdv ? foeToYou : youToFoe;
-  const advFrom = youAdv ? youName : foeName;
-  const advTo = youAdv ? foeName : youName;
-  const desc = [adv.reason, other.reason]
+  const { text, mult, tone } = advantageState(
+    youToFoe.multiplier,
+    foeToYou.multiplier,
+  );
+  const toneClass =
+    tone === "good"
+      ? "text-[#34B814]"
+      : tone === "bad"
+        ? "text-anymon-berry"
+        : "text-anymon-ink/50";
+  const desc = [youToFoe.reason, foeToYou.reason]
     .filter(Boolean)
     .filter((r, i, a) => a.indexOf(r) === i)
     .join(" — ");
@@ -110,13 +125,11 @@ function WeaknessBox({
         <span>type matchup</span>
         {matchup.field && <span className="text-anymon-ocean">· {matchup.field}</span>}
       </div>
-      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1 text-[12px] leading-snug">
-        <span className="font-bold">{advFrom}</span>
-        <span className="text-anymon-ink/40">▸</span>
-        <span className="font-bold">{advTo}</span>
-        <span className={`font-retro ${multClass(adv.multiplier)}`}>
-          ×{adv.multiplier}
+      <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1.5 text-[13px] leading-snug">
+        <span className={`font-retro uppercase tracking-wide ${toneClass}`}>
+          {text}
         </span>
+        <span className={`font-retro ${toneClass}`}>(×{mult})</span>
       </div>
       {desc && (
         <div className="mt-0.5 text-[11px] leading-snug text-anymon-ink/60">
@@ -408,8 +421,6 @@ export default function PvpBattleScreen({
             <WeaknessBox
               matchup={room.matchup}
               meIsChallenger={!!meIsChallenger}
-              youName={myFighter.name}
-              foeName={foeFighter.name}
             />
 
             <div className="mb-2 min-h-[4.25rem] space-y-1 rounded-gummy border-2 border-anymon-edgecloud bg-anymon-cloud p-3 text-sm text-anymon-ink shadow-gummy">

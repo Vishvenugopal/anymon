@@ -90,36 +90,56 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
   //               NOT swap in a random sample GLB — the Anymon resolves to "failed"
   //   <id>     -> a real provider task id to poll
   const spriteIsRaster = isRasterImage(sprite);
+  const photoIsRaster = isRasterImage(input.imageBase64);
   let meshyTaskId = "mock";
   if (is3DMock()) {
     meshyTaskId = "mock"; // demo path: sample GLB is expected, not a bug
-  } else if (!spriteIsRaster) {
-    // The sprite is the SVG placeholder (Gemini failed or image-mock). Sending it
-    // to a real 3D provider would 400, and faking a sample model is exactly the
-    // placeholder bug. Mark it failed and log why.
-    console.error(
-      `[pipeline] ${id}: no raster sprite to send to ${provider()} (sprite fell ` +
-        `back to the SVG placeholder — usually an invalid GEMINI_API_KEY). ` +
-        `Marking 3D as failed instead of serving a random sample model.`,
-    );
-    meshyTaskId = "failed";
   } else if (provider() === "hfspace") {
-    if (process.env.HF_TOKEN) {
+    // The HF Space path generates from the sprite (see startHfGeneration in the
+    // capture route), so it needs a real raster sprite + token. No photo fallback
+    // here — if Gemini failed there's nothing stylized to send.
+    if (spriteIsRaster && process.env.HF_TOKEN) {
       meshyTaskId = "hfspace";
     } else {
-      console.error("[pipeline] provider=hfspace but HF_TOKEN missing — marking failed");
+      console.error(
+        "[pipeline] hfspace path unavailable (needs raster sprite + HF_TOKEN) — marking failed",
+      );
       meshyTaskId = "failed";
     }
   } else {
-    try {
-      meshyTaskId = await create3D(sprite);
-      console.log(`[pipeline] ${id}: ${provider()} task started -> ${meshyTaskId}`);
-    } catch (e) {
+    // meshy / trellis. Prefer the STYLIZED Gemini sprite. If Gemini failed (the
+    // sprite fell back to the SVG placeholder — e.g. quota/billing 429), send the
+    // ORIGINAL captured photo instead: a real un-stylized 3D model beats no model,
+    // and Meshy reconstructs straight from any raster photo. We still NEVER swap in
+    // a random sample GLB (that was the old placeholder bug).
+    const threeDImage = spriteIsRaster
+      ? sprite
+      : photoIsRaster
+        ? input.imageBase64
+        : null;
+    if (!threeDImage) {
       console.error(
-        `[pipeline] ${id}: create3D (${provider()}) failed -> marking 3D failed:`,
-        (e as Error).message,
+        `[pipeline] ${id}: no raster image to send to ${provider()} (both the ` +
+          `sprite and the original photo are non-raster) — marking 3D failed.`,
       );
       meshyTaskId = "failed";
+    } else {
+      if (!spriteIsRaster) {
+        console.warn(
+          `[pipeline] ${id}: Gemini sprite unavailable (likely quota/billing 429) — ` +
+            `falling back to the ORIGINAL photo for ${provider()} (un-stylized 3D model).`,
+        );
+      }
+      try {
+        meshyTaskId = await create3D(threeDImage);
+        console.log(`[pipeline] ${id}: ${provider()} task started -> ${meshyTaskId}`);
+      } catch (e) {
+        console.error(
+          `[pipeline] ${id}: create3D (${provider()}) failed -> marking 3D failed:`,
+          (e as Error).message,
+        );
+        meshyTaskId = "failed";
+      }
     }
   }
 
@@ -134,11 +154,15 @@ export async function runCapture(input: CaptureInput): Promise<Anymon> {
 
 const MOCK_INCUBATE_MS = 6000;
 
-// Hard cap on real 3D generation. If a provider task hasn't finished within this
-// window we STOP polling and resolve to a terminal "failed" so the UI can never
-// incubate forever (the 2D sprite is still shown). Meshy/TRELLIS usually finish
-// well under this; the mock/demo path resolves in MOCK_INCUBATE_MS regardless.
-const MAX_INCUBATE_MS = 3 * 60_000;
+// Hard cap on real 3D generation: a FAILURE ceiling, not the expected time. A
+// successful task resolves the instant the provider finishes, so this never
+// slows a good capture — it only bounds how long we wait before declaring a
+// genuinely-stuck job failed (the 2D sprite still shows). It's measured from the
+// Anymon's createdAt, which precedes the provider call (Claude + Gemini run
+// first), so it must exceed the provider's own job time + queue. Meshy textured
+// image-to-3D ran ~3 min (the old 3-min cap tripped ~0.3s too early); without
+// PBR it's a bit faster, so 6 min is comfortable headroom.
+const MAX_INCUBATE_MS = 6 * 60_000;
 
 /** Resolves the 3D model status for an Anymon (mock = timed, real = provider). */
 export async function resolveGlb(

@@ -202,6 +202,18 @@ export async function apiRecall(
   return res.json();
 }
 
+/** Permanently delete one of your Anymon (deck or roaming). Cannot be undone. */
+export async function apiDelete(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch("/api/anymon/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  return res.json();
+}
+
 /** Pay coins to fully heal a hurt Anymon. Returns the cost paid + new HP. */
 export async function apiHeal(id: string): Promise<{
   ok: boolean;

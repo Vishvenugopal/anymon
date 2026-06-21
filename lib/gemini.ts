@@ -14,16 +14,19 @@ const MAX_ATTEMPTS = 4; // 1 initial try + 3 retries
 const BASE_DELAY_MS = 800;
 const MAX_DELAY_MS = 8000;
 
-// Real Google AI Studio (Generative Language API) keys look like "AIza…". Tokens
-// that start with "AQ." are OAuth/other tokens the SDK will reject. Warn loudly
-// (without leaking the secret) so the placeholder-sprite fallback is explained.
+// Google AI Studio keys come in two valid shapes: the classic "AIza…" keys and
+// the newer "AQ.…" project keys (both authenticate fine). Anything else is
+// probably an OAuth/other token the SDK will reject. NOTE: a valid key can still
+// fail with HTTP 429 `RESOURCE_EXHAUSTED` — the image model (Nano Banana) has a
+// free-tier quota of ZERO, so image generation requires billing enabled on the
+// key's Google Cloud project. That is NOT a bad key; see the 429 handling below.
 function warnIfSuspiciousKey(apiKey: string): void {
-  if (!apiKey.startsWith("AIza")) {
+  if (!apiKey.startsWith("AIza") && !apiKey.startsWith("AQ.")) {
     console.error(
       `[gemini] GEMINI_API_KEY does not look like a Google AI Studio key ` +
-        `(expected "AIza…", got "${apiKey.slice(0, 4)}…"). Image generation will ` +
-        `likely fail and fall back to the placeholder sprite. Get a valid key at ` +
-        `https://aistudio.google.com/apikey`,
+        `(expected "AIza…" or "AQ.…", got "${apiKey.slice(0, 4)}…"). Image ` +
+        `generation will likely fail and fall back to the placeholder sprite. Get ` +
+        `a valid key at https://aistudio.google.com/apikey`,
     );
   }
 }
@@ -143,13 +146,14 @@ export async function generateAnymonSprite(
   // Specifically flag exhausted free-tier image quota as a USER ACTION ITEM.
   if (isQuota(lastErr)) {
     console.error(
-      `[gemini] ACTION REQUIRED — image generation is still HTTP 429 (rate ` +
-        `limited / quota exhausted) after ${MAX_ATTEMPTS} attempts. The Gemini ` +
-        `image model "${MODEL}" has a very low FREE-TIER rate limit. To fix: enable ` +
-        `billing on your Google AI Studio / Google Cloud project ` +
-        `(https://aistudio.google.com/apikey — link a billing account), or wait for ` +
-        `the per-minute/day quota window to reset. Falling back to the 2D placeholder ` +
-        `sprite so the capture still resolves.`,
+      `[gemini] ACTION REQUIRED — image generation is HTTP 429 ` +
+        `(RESOURCE_EXHAUSTED) after ${MAX_ATTEMPTS} attempts. The image model ` +
+        `"${MODEL}" has a FREE-TIER quota of ZERO, so it requires BILLING enabled ` +
+        `on the API key's Google Cloud project. A consumer "Gemini Pro"/"Google AI ` +
+        `Pro" subscription does NOT count — it's a separate product. Fix: go to ` +
+        `https://aistudio.google.com/apikey, open the key's project, and enable ` +
+        `billing (pay-as-you-go, ~$0.04/image). The same key then works with no code ` +
+        `change. Capture continues via the original-photo 3D fallback / 2D sprite.`,
     );
   }
   throw lastErr instanceof Error ? lastErr : new Error("Gemini image generation failed");

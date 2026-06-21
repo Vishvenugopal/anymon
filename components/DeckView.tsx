@@ -7,6 +7,7 @@ import { signOut } from "next-auth/react";
 import AnymonCanvas from "./AnymonCanvas";
 import {
   apiAcknowledge,
+  apiDelete,
   apiHeal,
   apiRecall,
   apiRelease,
@@ -20,6 +21,68 @@ import { MAX_DECK, MAX_WILD, RARITY_MAX } from "@/lib/types";
 /** Render a player's display name as "Trainer X" (casing preserved via .preserve-case). */
 export function trainerName(name: string): string {
   return `Trainer ${name}`;
+}
+
+/** iOS gates DeviceOrientationEvent behind a user-gesture permission prompt. */
+function requestOrientationPermission() {
+  if (typeof window === "undefined") return;
+  const D = window.DeviceOrientationEvent as unknown as {
+    requestPermission?: () => Promise<"granted" | "denied">;
+  };
+  if (D && typeof D.requestPermission === "function") {
+    D.requestPermission().catch(() => {});
+  }
+}
+
+/**
+ * Marvel-Snap-style physical-card tilt driven by the phone's gyroscope. Only
+ * attaches a listener while `enabled` (the card is focused), and calibrates the
+ * neutral orientation to wherever the phone is the moment it engages, so tilting
+ * from that rest pose rocks the card. Returns null on desktop (no sensor events).
+ */
+function useDeviceTilt(enabled: boolean): { rx: number; ry: number } | null {
+  const [tilt, setTilt] = useState<{ rx: number; ry: number } | null>(null);
+  const restRef = useRef<{ beta: number; gamma: number } | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setTilt(null);
+      restRef.current = null;
+      return;
+    }
+    const onOrient = (e: DeviceOrientationEvent) => {
+      if (e.beta == null || e.gamma == null) return;
+      if (!restRef.current) restRef.current = { beta: e.beta, gamma: e.gamma };
+      const clamp = (v: number, m: number) => Math.max(-m, Math.min(m, v));
+      const db = e.beta - restRef.current.beta; // tilt toward/away from you
+      const dg = e.gamma - restRef.current.gamma; // tilt left/right
+      setTilt({ rx: clamp(db * 0.7, 18), ry: clamp(dg * 0.7, 18) });
+    };
+    window.addEventListener("deviceorientation", onOrient, true);
+    return () => window.removeEventListener("deviceorientation", onOrient, true);
+  }, [enabled]);
+
+  return tilt;
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 6h18" />
+      <path d="M8 6V4h8v2" />
+      <path d="M6 6l1 14h10l1-14" />
+    </svg>
+  );
 }
 
 /** Plain-language explainer for what deploying / roaming entails. */
@@ -107,6 +170,72 @@ function RoamInfoModal({
   );
 }
 
+/** Delete confirmation — same chrome as RoamInfoModal (deck-modal classes). */
+function DeleteConfirmModal({
+  a,
+  onClose,
+  onConfirm,
+  busy,
+  error,
+}: {
+  a: Anymon;
+  onClose: () => void;
+  onConfirm: () => void;
+  busy?: boolean;
+  error?: string | null;
+}) {
+  return (
+    <motion.div
+      className="deck-modal-backdrop"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={onClose}
+    >
+      <motion.div
+        className="deck-modal"
+        initial={{ scale: 0.9, y: 10, opacity: 0 }}
+        animate={{ scale: 1, y: 0, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 260, damping: 22 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 font-retro text-lg uppercase tracking-wide text-anymon-cardink">
+          delete this anymon?
+        </div>
+        <p className="text-xs leading-relaxed text-anymon-ink/75">
+          <span className="preserve-case font-bold text-anymon-cardink">
+            {a.name}
+          </span>{" "}
+          will be permanently removed from your collection. this{" "}
+          <span className="text-anymon-cardink">can&apos;t be undone</span>.
+        </p>
+        {error && (
+          <div className="mt-2 text-center text-[11px] text-anymon-berry">
+            {error}
+          </div>
+        )}
+        <div className="mt-3 flex gap-2">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="retro-btn flex-1 border-anymon-edgecloud bg-white py-2 text-xs"
+          >
+            cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={busy}
+            className="retro-btn flex-1 border-anymon-edgeberry bg-anymon-berry py-2 text-xs text-white shadow-retro-berry"
+          >
+            {busy ? "deleting…" : "delete"}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 /** 1–5 gold stars in the top-left of the art window. */
 function RarityStars({ rarity }: { rarity: number }) {
   const filled = Math.max(1, Math.min(RARITY_MAX, Math.round(rarity || 1)));
@@ -125,12 +254,15 @@ function AnymonCard({
   a,
   onChanged,
   onDeploy,
+  onDelete,
   idx = 0,
 }: {
   a: Anymon;
   onChanged: () => void;
   /** Provided for deck cards: opens the shared deploy-confirm modal. */
   onDeploy?: (a: Anymon) => void;
+  /** Opens the shared delete-confirm modal. */
+  onDelete?: (a: Anymon) => void;
   idx?: number;
 }) {
   const [busy, setBusy] = useState(false);
@@ -138,6 +270,13 @@ function AnymonCard({
   const [coinFx, setCoinFx] = useState<number | null>(null);
   const ackedRef = useRef(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  // Live 3D (a WebGL context) is mounted ONLY for the focused card. Showing all
+  // ~10 deck/wild canvases at once exhausts the browser's WebGL context limit
+  // (~8 on iOS Safari), which silently drops contexts and renders every model
+  // white. Desktop: hover. Touch: tap to pin, or press-drag to tilt.
+  const [hovered, setHovered] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const downRef = useRef<{ x: number; y: number } | null>(null);
 
   // Touch devices have no :hover, so the tilt/lift/shine can't be seen. We
   // reproduce the hover transform from a press-and-drag gesture: while a finger
@@ -167,13 +306,37 @@ function AnymonCard({
   const onCardPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse") return;
     if ((e.target as HTMLElement).closest("button")) return;
+    downRef.current = { x: e.clientX, y: e.clientY };
     tiltFromPoint(e.clientX, e.clientY);
   };
   const onCardPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" || !dragTilt) return;
     tiltFromPoint(e.clientX, e.clientY);
   };
+  // On touch/pen, a tap (negligible movement) toggles a "pinned" 3D view so the
+  // model keeps spinning after the finger lifts; a real drag just tilts the card.
+  const onCardPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== "mouse" && downRef.current) {
+      const dx = e.clientX - downRef.current.x;
+      const dy = e.clientY - downRef.current.y;
+      const isTap =
+        Math.hypot(dx, dy) < 8 && !(e.target as HTMLElement).closest("button");
+      if (isTap)
+        setPinned((p) => {
+          const next = !p;
+          // Engaging 3D on touch is the user gesture iOS needs to grant the
+          // gyroscope permission that drives the Marvel-Snap card tilt.
+          if (next) requestOrientationPermission();
+          return next;
+        });
+    }
+    downRef.current = null;
+    setDragTilt(null);
+  };
   const clearTilt = () => setDragTilt(null);
+  const active3d = hovered || pinned || dragTilt !== null;
+  // While focused on a phone, rock the card with the gyroscope (null elsewhere).
+  const deviceTilt = useDeviceTilt(active3d);
 
   const hurt = a.hp < a.maxHp;
   const cost = healCost(a);
@@ -219,46 +382,77 @@ function AnymonCard({
         animate={
           dragTilt
             ? { ...dragTilt, zIndex: 30 }
-            : { rotateX: 0, rotateY: 0, scale: 1 }
+            : deviceTilt
+              ? {
+                  rotateX: deviceTilt.rx,
+                  rotateY: deviceTilt.ry,
+                  scale: 1.05,
+                  zIndex: 30,
+                }
+              : { rotateX: 0, rotateY: 0, scale: 1 }
         }
         transition={{ type: "spring", stiffness: 240, damping: 18 }}
         style={{ transformPerspective: 720, rotateZ: tilt }}
         onPointerDown={onCardPointerDown}
         onPointerMove={onCardPointerMove}
-        onPointerUp={clearTilt}
+        onPointerUp={onCardPointerUp}
         onPointerCancel={clearTilt}
         onPointerLeave={clearTilt}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         className="anymon-card group p-1.5"
       >
         {/* moving glossy foil sheen (above art, below text via z-index) */}
         <div className="card-sheen z-20" />
 
+        {/* delete (very top-right corner) — opens the shared confirm popup */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete?.(a);
+          }}
+          aria-label="delete anymon"
+          className="absolute right-1 top-1 z-30 flex h-6 w-6 items-center justify-center rounded-full border border-anymon-edgeberry bg-white/90 text-anymon-berry shadow-[0_2px_0_0_#9E2138] active:translate-y-[1px] active:shadow-none"
+        >
+          <TrashIcon />
+        </button>
+
         <div className="relative z-10">
           {/* Title bar: name only (full width — type label now sits in the art box) */}
           <div className="px-1 pb-1.5 pt-0.5">
-            <div className="truncate font-retro text-sm uppercase tracking-wide text-anymon-white drop-shadow-[0_1px_0_rgba(120,20,30,0.7)]">
+            <div className="truncate pr-6 font-retro text-sm uppercase tracking-wide text-anymon-white drop-shadow-[0_1px_0_rgba(120,20,30,0.7)]">
               {a.name}
             </div>
           </div>
 
           {/* Framed art window wrapping the 3D canvas (rectangular like real cards) */}
-          <div className="relative border-2 border-white/55 bg-anymon-cloud shadow-[inset_0_2px_6px_rgba(120,20,30,0.35)]">
+          <div className="relative border-2 border-white/55 bg-anymon-cloud">
             <RarityStars rarity={a.rarity} />
             <div className="h-36 w-full overflow-hidden">
               <AnymonCanvas
                 glbUrl={a.status === "ready" ? a.glbUrl : null}
                 spriteFallback={a.spriteDataUri}
+                active={active3d}
                 className="h-full w-full"
               />
             </div>
-            {/* Object-type label, anchored bottom-right of the art box (keeps its
-                faded-red styling; frees up horizontal room for the name above). */}
-            <span className="type-badge absolute bottom-1.5 right-1.5 z-10 max-w-[70%] truncate">
+            {/* Frame's inset shadow rendered ABOVE the art so the anymon image
+                sits BEHIND the frame shadow (depth), but still below the
+                stars/badges (z-10) which must stay crisp. */}
+            <div className="pointer-events-none absolute inset-0 shadow-[inset_0_2px_6px_rgba(120,20,30,0.35)]" />
+            {/* Object-type label, anchored top-right of the art box (keeps its
+                faded-red styling; frees up the bottom for incubating/3d badges). */}
+            <span className="type-badge absolute right-1.5 top-1.5 z-10 max-w-[70%] truncate">
               {a.object}
             </span>
             {a.status !== "ready" && (
               <div className="absolute left-1.5 bottom-1.5 rounded-gummy border border-anymon-edgeberry bg-anymon-berry px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-anymon-white">
                 incubating…
+              </div>
+            )}
+            {a.status === "ready" && a.glbUrl && !active3d && (
+              <div className="pointer-events-none absolute left-1.5 bottom-1.5 rounded-gummy border border-anymon-edgeocean bg-anymon-ocean/90 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-anymon-white">
+                tap · 3d
               </div>
             )}
           </div>
@@ -400,15 +594,20 @@ export default function DeckView({
   const captured = anymons.filter((a) => a.state === "captured");
   const totalCoins = anymons.reduce((s, a) => s + a.coins, 0);
 
-  // Shared modal: { mode: "info" } for the "?" explainer, or a deploy confirm.
+  // Shared modal: { mode: "info" } for the "?" explainer, a deploy confirm, or a
+  // delete confirm.
   const [modal, setModal] = useState<
-    null | { mode: "info" } | { mode: "confirm"; a: Anymon }
+    | null
+    | { mode: "info" }
+    | { mode: "confirm"; a: Anymon }
+    | { mode: "delete"; a: Anymon }
   >(null);
   const [deploying, setDeploying] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [modalErr, setModalErr] = useState<string | null>(null);
 
   const closeModal = () => {
-    if (deploying) return;
+    if (deploying || deleting) return;
     setModal(null);
     setModalErr(null);
   };
@@ -429,6 +628,25 @@ export default function DeckView({
     }
     setModal(null);
     onChanged();
+  };
+
+  const confirmDelete = async () => {
+    if (!modal || modal.mode !== "delete") return;
+    setDeleting(true);
+    setModalErr(null);
+    const res = await apiDelete(modal.a.id);
+    setDeleting(false);
+    if (!res.ok) {
+      setModalErr(res.error || "could not delete");
+      return;
+    }
+    setModal(null);
+    onChanged();
+  };
+
+  const openDelete = (target: Anymon) => {
+    setModalErr(null);
+    setModal({ mode: "delete", a: target });
   };
 
   return (
@@ -490,6 +708,7 @@ export default function DeckView({
                   setModalErr(null);
                   setModal({ mode: "confirm", a: target });
                 }}
+                onDelete={openDelete}
                 idx={i}
               />
             ))}
@@ -511,7 +730,13 @@ export default function DeckView({
           ) : (
             <div className="grid grid-cols-2 gap-3">
               {wild.map((a, i) => (
-                <AnymonCard key={a.id} a={a} onChanged={onChanged} idx={i} />
+                <AnymonCard
+                  key={a.id}
+                  a={a}
+                  onChanged={onChanged}
+                  onDelete={openDelete}
+                  idx={i}
+                />
               ))}
             </div>
           )}
@@ -519,7 +744,16 @@ export default function DeckView({
       </div>
 
       <AnimatePresence>
-        {modal && (
+        {modal && modal.mode === "delete" ? (
+          <DeleteConfirmModal
+            key="delete-modal"
+            a={modal.a}
+            onClose={closeModal}
+            onConfirm={confirmDelete}
+            busy={deleting}
+            error={modalErr}
+          />
+        ) : modal ? (
           <RoamInfoModal
             key="roam-modal"
             onClose={closeModal}
@@ -527,7 +761,7 @@ export default function DeckView({
             busy={deploying}
             error={modalErr}
           />
-        )}
+        ) : null}
       </AnimatePresence>
     </div>
   );
