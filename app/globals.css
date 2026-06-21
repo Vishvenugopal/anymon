@@ -1,0 +1,96 @@
+@import url("https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Doto:wght@400;700;900&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --anymon-white: #ffffff;
+  --anymon-lime: #32cd32;
+  --anymon-ocean: #00bfff;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: "Quicksand", ui-rounded, system-ui, sans-serif;
+  text-transform: lowercase;
+  background: #0b1f24;
+  color: #0b1f24;
+  overscroll-behavior: none;
+}
+
+/* keep proper-noun-ish things readable even with global lowercase */
+input,
+textarea {
+  text-transform: none;
+}
+
+@layer components {
+  .gummy-btn {
+    @apply rounded-full font-bold text-white transition-transform active:translate-y-1 active:shadow-none select-none;
+  }
+  .card-gummy {
+    @apply rounded-gummy bg-white border-2 border-anymon-cloud shadow-gummy;
+  }
+}
+
+/* Stylized green pixel scanner overlay */
+.scanner-overlay {
+  background:
+    linear-gradient(rgba(50, 205, 50, 0.18), rgba(0, 191, 255, 0.12)),
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.12) 0px,
+      rgba(0, 0, 0, 0.12) 1px,
+      transparent 2px,
+      transparent 4px
+    );
+  mix-blend-mode: screen;
+}
+
+.scanner-pixels {
+  background-image: radial-gradient(
+    rgba(50, 205, 50, 0.35) 1px,
+    transparent 1.6px
+  );
+  background-size: 6px 6px;
+  image-rendering: pixelated;
+}
+
+.scanner-scanline {
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(50, 205, 50, 0.85),
+    transparent
+  );
+  height: 22%;
+  animation: scan 2.8s linear infinite;
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-120%);
+  }
+  100% {
+    transform: translateY(560%);
+  }
+}
+
+.font-retro {
+  font-family: "Doto", ui-monospace, monospace;
+  font-weight: 900;
+}
+
+/* hide scrollbars in the app frame */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -1,0 +1,7 @@
+# HTTP wrapper deps. TRELLIS itself + its heavy deps (torch, etc.) are installed
+# by following the official TRELLIS install (see README.md), since they are
+# CUDA/GPU-specific and not pip-resolvable in a portable way.
+fastapi
+uvicorn[standard]
+pillow
+requests

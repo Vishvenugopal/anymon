@@ -1,0 +1,94 @@
+"use client";
+
+import { Suspense, useMemo, useRef, Component, type ReactNode } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { useGLTF } from "@react-three/drei";
+import * as THREE from "three";
+
+function Model({ url }: { url: string }) {
+  const { scene } = useGLTF(url);
+  const ref = useRef<THREE.Group>(null);
+
+  const cloned = useMemo(() => scene.clone(true), [scene]);
+  const { scale, offset } = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(cloned);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    const maxDim = Math.max(size.x, size.y, size.z) || 1;
+    return { scale: 2.2 / maxDim, offset: center };
+  }, [cloned]);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime;
+    ref.current.rotation.y = t * 0.5;
+    ref.current.position.y = Math.sin(t * 1.6) * 0.12;
+  });
+
+  return (
+    <group ref={ref}>
+      <group
+        scale={scale}
+        position={[-offset.x * scale, -offset.y * scale, -offset.z * scale]}
+      >
+        <primitive object={cloned} />
+      </group>
+    </group>
+  );
+}
+
+class GlbErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
+export default function AnymonCanvas({
+  glbUrl,
+  spriteFallback,
+  className = "",
+}: {
+  glbUrl: string | null;
+  spriteFallback?: string;
+  className?: string;
+}) {
+  const fallback = spriteFallback ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={spriteFallback}
+      alt="anymon"
+      className="h-full w-full object-contain"
+    />
+  ) : (
+    <div className="flex h-full w-full items-center justify-center text-5xl">
+      ✨
+    </div>
+  );
+
+  if (!glbUrl) return <div className={className}>{fallback}</div>;
+
+  return (
+    <div className={className}>
+      <GlbErrorBoundary fallback={fallback}>
+        <Canvas camera={{ position: [0, 0, 5], fov: 40 }} dpr={[1, 2]}>
+          <ambientLight intensity={0.9} />
+          <hemisphereLight intensity={0.6} groundColor="#bfe9ff" />
+          <directionalLight position={[3, 5, 4]} intensity={1.4} />
+          <directionalLight position={[-4, 2, -3]} intensity={0.5} color="#32cd32" />
+          <Suspense fallback={null}>
+            <Model url={glbUrl} />
+          </Suspense>
+        </Canvas>
+      </GlbErrorBoundary>
+    </div>
+  );
+}
