@@ -20,6 +20,8 @@ body {
 
 body {
   font-family: "Quicksand", ui-rounded, system-ui, sans-serif;
+  /* All sans-serif (non-retro) text is bold by default. */
+  font-weight: 700;
   text-transform: lowercase;
   background: #0b1f24;
   color: #0b1f24;
@@ -37,14 +39,14 @@ textarea {
     @apply rounded-full font-bold text-white transition-transform active:translate-y-1 active:shadow-none select-none;
   }
   .card-gummy {
-    @apply rounded-gummy bg-white border-2 border-anymon-cloud shadow-gummy;
+    @apply rounded-gummy bg-white border-2 border-anymon-edgecloud shadow-gummy;
   }
 
   /* ---- Retro / Pokemon / Persona-5 primitives ---- */
 
-  /* Chunky bordered panel with a hard angular offset shadow. */
+  /* Chunky bordered panel with a soft cool edge + subtle offset shadow. */
   .retro-panel {
-    @apply rounded-xl border-2 border-anymon-ink bg-white shadow-retro;
+    @apply rounded-gummy border-2 border-anymon-edgecloud bg-white shadow-retro;
   }
 
   /* Angular Persona-style header strip (slight skew handled via accent bar). */
@@ -52,19 +54,21 @@ textarea {
     @apply font-retro uppercase tracking-widest text-anymon-ink;
   }
 
-  /* Chunky tactile button: bold border + hard offset shadow that "presses". */
+  /* Chunky tactile button: cool edge border + small offset shadow that "presses".
+     Border defaults to a deep cool teal; colored variants override with their
+     matching edge token (e.g. bg-anymon-lime + border-anymon-edgelime). */
   .retro-btn {
-    @apply inline-flex items-center justify-center rounded-lg border-2 border-anymon-ink
+    @apply inline-flex items-center justify-center rounded-gummy border-2 border-anymon-edgeink
       font-bold text-anymon-ink shadow-retro transition-transform select-none
-      active:translate-x-[3px] active:translate-y-[3px] active:shadow-none
+      active:translate-x-[2px] active:translate-y-[2px] active:shadow-none
       disabled:opacity-60;
   }
 
   /* Small element / type badge (Pokemon "type" chip). */
   .type-badge {
-    @apply inline-flex items-center gap-1 rounded-md border-2 border-anymon-ink
+    @apply inline-flex items-center gap-1 rounded-gummy border-2 border-anymon-edgelime
       bg-anymon-lime px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide
-      text-anymon-ink shadow-[2px_2px_0_0_#0a1418];
+      text-anymon-ink shadow-[1px_1px_0_0_#4E8F2C];
   }
 }
 
@@ -96,6 +100,27 @@ textarea {
   image-rendering: pixelated;
 }
 
+/* Deck-screen red dot field (mirrors .scanner-pixels but in the card/berry red
+   family). A vertical alpha mask makes the dots fully opaque at the bottom and
+   fade to fully transparent toward the top of the band. */
+.deck-dots-red {
+  background-image: radial-gradient(#e24040 1px, transparent 1.6px);
+  background-size: 6px 6px;
+  image-rendering: pixelated;
+  -webkit-mask-image: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 12%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  mask-image: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 1) 12%,
+    rgba(0, 0, 0, 0) 100%
+  );
+}
+
 .scanner-scanline {
   background: linear-gradient(
     to bottom,
@@ -113,6 +138,71 @@ textarea {
   }
   100% {
     transform: translateY(560%);
+  }
+}
+
+/* ---- Physical collectible card (Deck) ---- */
+/* Sharp/squared corners on purpose — distinct from the global rounded radius. */
+.anymon-card {
+  border-radius: 0;
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0) 30%),
+    linear-gradient(160deg, #ef5e5e 0%, #e24040 48%, #b8323f 100%);
+  border: 2px solid #b23647;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -5px 10px rgba(120, 20, 30, 0.45),
+    0 5px 10px -6px rgba(10, 20, 24, 0.5);
+  transform-style: preserve-3d;
+}
+
+/* faint holographic foil tint layered under the content */
+.anymon-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    125deg,
+    rgba(63, 176, 214, 0) 38%,
+    rgba(139, 224, 30, 0.16) 50%,
+    rgba(63, 176, 214, 0.2) 60%,
+    rgba(255, 59, 83, 0) 76%
+  );
+  mix-blend-mode: overlay;
+  pointer-events: none;
+}
+
+/* glossy moving light streak that sweeps across the card like real foil */
+.card-sheen {
+  position: absolute;
+  inset: -40%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgba(255, 255, 255, 0.5) 46%,
+    rgba(255, 244, 214, 0.35) 50%,
+    rgba(255, 255, 255, 0.5) 54%,
+    transparent 68%
+  );
+  mix-blend-mode: screen;
+  animation: cardsheen 5.5s ease-in-out infinite;
+}
+
+@keyframes cardsheen {
+  0%,
+  100% {
+    transform: translateX(-65%);
+    opacity: 0;
+  }
+  42% {
+    opacity: 0.9;
+  }
+  62% {
+    transform: translateX(65%);
+    opacity: 0;
   }
 }
 

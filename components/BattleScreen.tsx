@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import AnymonCanvas from "./AnymonCanvas";
 import {
   apiBattleCancel,
   apiBattleResolve,
@@ -10,6 +11,47 @@ import {
   type Matchup,
   type Move,
 } from "@/lib/client";
+import type { MoveKind } from "@/lib/types";
+
+// Classic Pokemon-style move-tile coloring, on-brand with cohesive edges.
+function moveTileClass(kind: MoveKind): string {
+  if (kind === "status")
+    return "bg-anymon-berry border-anymon-edgeberry text-anymon-white";
+  if (kind === "special")
+    return "bg-anymon-ocean border-anymon-edgeocean text-anymon-white";
+  return "bg-anymon-lime border-anymon-edgelime text-anymon-ink";
+}
+
+/** Shared on-brand combatant stage: 3D model (sprite fallback) on a platform. */
+function Fighter({
+  glbUrl,
+  sprite,
+  size,
+  hit,
+}: {
+  glbUrl: string | null;
+  sprite: string;
+  size: string;
+  hit: boolean;
+}) {
+  return (
+    <motion.div
+      animate={hit ? { x: [0, -6, 6, -3, 0], opacity: [1, 0.5, 1] } : {}}
+      transition={{ duration: 0.32 }}
+      className="relative flex flex-col items-center"
+    >
+      <div className={`relative ${size}`}>
+        <AnymonCanvas
+          glbUrl={glbUrl}
+          spriteFallback={sprite}
+          className="h-full w-full drop-shadow-[0_6px_4px_rgba(10,20,24,0.35)]"
+        />
+      </div>
+      {/* arena platform */}
+      <div className="-mt-2 h-3 w-20 rounded-full bg-anymon-ink/25 blur-[3px]" />
+    </motion.div>
+  );
+}
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const STATUS_HEAL = 14;
@@ -41,14 +83,14 @@ function hpColor(pct: number): string {
 function HpBar({ hp, max, name }: { hp: number; max: number; name: string }) {
   const pct = Math.max(0, Math.round((hp / max) * 100));
   return (
-    <div className="rounded-2xl bg-white/90 px-3 py-2 shadow-gummy">
-      <div className="flex items-baseline justify-between">
-        <span className="truncate font-bold text-anymon-ink">{name}</span>
+    <div className="rounded-gummy border-2 border-anymon-edgecloud bg-white/95 px-3 py-2 shadow-retro">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-anymon-ink">{name}</span>
         <span className="font-retro text-[10px] text-anymon-ink/60">
           {Math.max(0, hp)}/{max}
         </span>
       </div>
-      <div className="mt-1 h-2.5 w-40 max-w-[42vw] overflow-hidden rounded-full bg-black/15">
+      <div className="mt-1 h-2.5 w-40 max-w-[42vw] overflow-hidden rounded-full border border-anymon-edgecloud bg-anymon-ink/10">
         <motion.div
           className={`h-full rounded-full ${hpColor(pct)}`}
           animate={{ width: `${pct}%` }}
@@ -228,66 +270,62 @@ export default function BattleScreen({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-50 flex flex-col bg-gradient-to-b from-sky-300 via-sky-200 to-anymon-lime/40"
+      className="absolute inset-0 z-50 flex flex-col overflow-hidden bg-gradient-to-b from-sky-300 via-sky-100 to-anymon-lime"
     >
+      {/* fully OPAQUE on-brand arena backdrop (no see-through to the camera) */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-x-0 bottom-0 h-2/5 bg-gradient-to-b from-transparent via-anymon-lime to-anymon-limedark" />
+        <div className="absolute inset-0 scanner-pixels opacity-20" />
+      </div>
+
       {/* ENEMY */}
-      <div className="relative flex items-start justify-between px-4 pt-6">
+      <div className="relative z-10 flex items-start justify-between px-4 pt-6">
         <HpBar hp={dHp} max={defender.maxHp} name={defender.name} />
-        <motion.div
-          animate={enemyHit ? { x: [0, -6, 6, -3, 0], opacity: [1, 0.5, 1] } : {}}
-          transition={{ duration: 0.32 }}
-          className="mr-1"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={defender.spriteDataUri}
-            alt={defender.name}
-            className="h-28 w-28 object-contain drop-shadow-lg"
-          />
-        </motion.div>
+        <Fighter
+          glbUrl={defender.glbUrl}
+          sprite={defender.spriteDataUri}
+          size="h-28 w-28"
+          hit={enemyHit}
+        />
       </div>
 
       {/* PLAYER */}
-      <div className="relative mt-2 flex items-end justify-between px-4">
-        <motion.div
-          animate={playerHit ? { x: [0, -6, 6, -3, 0], opacity: [1, 0.5, 1] } : {}}
-          transition={{ duration: 0.32 }}
-          className="ml-1"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={attacker.spriteDataUri}
-            alt={attacker.name}
-            className="h-32 w-32 object-contain drop-shadow-lg"
-          />
-        </motion.div>
+      <div className="relative z-10 mt-2 flex items-end justify-between px-4">
+        <Fighter
+          glbUrl={attacker.glbUrl}
+          sprite={attacker.spriteDataUri}
+          size="h-32 w-32"
+          hit={playerHit}
+        />
         <HpBar hp={aHp} max={attacker.maxHp} name={attacker.name} />
       </div>
 
       {/* LOG + MENU */}
-      <div className="mt-auto">
-        <div className="mx-3 mb-2 min-h-[4.5rem] rounded-gummy border-2 border-anymon-ink/10 bg-white/95 p-3 text-sm font-medium text-anymon-ink shadow-gummy">
+      <div className="relative z-10 mt-auto p-3">
+        <div className="mb-2 min-h-[4.25rem] rounded-gummy border-2 border-anymon-edgeink bg-anymon-cloud p-3 text-sm text-anymon-ink shadow-retro">
           {log}
         </div>
 
-        <div className="rounded-t-gummy bg-anymon-ink/95 p-3">
+        <div className="rounded-gummy border-2 border-anymon-edgeink bg-anymon-ink p-2 shadow-retro">
           {phase === "player" ? (
             <div className="grid grid-cols-2 gap-2">
               {attacker.moves.map((m) => (
                 <button
                   key={m.name}
                   onClick={() => playerTurn(m)}
-                  className="group flex flex-col rounded-2xl bg-white px-3 py-2 text-left transition active:scale-95"
+                  className={`retro-btn flex flex-col items-start gap-0.5 px-3 py-2 text-left ${moveTileClass(
+                    m.kind,
+                  )}`}
                 >
-                  <span className="font-bold leading-tight text-anymon-ink">
+                  <span className="text-sm leading-tight">
                     {m.emoji} {m.name}
                   </span>
-                  <span className="font-retro text-[9px] tracking-wider text-anymon-ocean">
+                  <span className="font-retro text-[9px] tracking-wider opacity-80">
                     {m.kind === "status"
                       ? `support · acc ${m.accuracy}`
                       : `pow ${m.power} · acc ${m.accuracy}`}
                   </span>
-                  <span className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-anymon-ink/55">
+                  <span className="line-clamp-2 text-[10px] leading-snug opacity-90">
                     {m.blurb}
                   </span>
                 </button>
@@ -328,7 +366,7 @@ function ResultPanel({
       >
         <div
           className={`font-retro text-lg tracking-widest ${
-            youWon ? "text-anymon-lime" : "text-red-400"
+            youWon ? "text-anymon-lime" : "text-anymon-berry"
           }`}
         >
           {youWon ? "victory!" : "defeated!"}

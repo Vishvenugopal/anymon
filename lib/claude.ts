@@ -240,10 +240,10 @@ function sanitizeMoves(raw: unknown, object: string): Move[] {
 export function fallbackMoves(object: string): Move[] {
   const o = object || "anymon";
   return [
-    { name: "Tackle", power: 18, accuracy: 100, kind: "physical", emoji: "💥", blurb: `The ${o} throws its full mass into a hit (momentum = mass × velocity).` },
-    { name: "Slam", power: 30, accuracy: 80, kind: "physical", emoji: "🔨", blurb: `A heavy, risky strike — more force, harder to aim.` },
-    { name: "Quirk Beam", power: 25, accuracy: 90, kind: "special", emoji: "🌈", blurb: `Channels the ${o}'s signature property into energy.` },
-    { name: "Brace", power: 0, accuracy: 100, kind: "status", emoji: "🛡️", blurb: `Stiffens up to absorb the next blow (rigidity resists deformation).` },
+    { name: "Tackle", power: 18, accuracy: 100, kind: "physical", emoji: "💥", blurb: `a quick body bump` },
+    { name: "Slam", power: 30, accuracy: 80, kind: "physical", emoji: "🔨", blurb: `big heavy smash` },
+    { name: "Quirk Beam", power: 25, accuracy: 90, kind: "special", emoji: "🌈", blurb: `${o} power blast` },
+    { name: "Brace", power: 0, accuracy: 100, kind: "status", emoji: "🛡️", blurb: `blocks the next hit` },
   ];
 }
 

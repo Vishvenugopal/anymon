@@ -305,9 +305,9 @@ export default function ScannerView({
           whileTap={{ scale: 0.9 }}
           onClick={capturePhoto}
           disabled={busy}
-          className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white bg-anymon-lime shadow-gummy disabled:opacity-60"
+          className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-anymon-edgelime bg-anymon-lime shadow-gummy ring-2 ring-white/80 disabled:opacity-60"
         >
-          <span className="h-14 w-14 rounded-full bg-white" />
+          <span className="h-14 w-14 rounded-full border-2 border-anymon-edgelime bg-white" />
         </motion.button>
         <div className="rounded-full bg-black/40 px-3 py-1 text-xs text-white/90">
           {busy ? "capturing the essence…" : "point at an object & tap"}

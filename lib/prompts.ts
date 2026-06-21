@@ -68,11 +68,15 @@ export const MOVES_SYSTEM_PROMPT = [
   "You design a moveset for a creature in Anymon, an educational monster-battler.",
   "The creature is based on a REAL-WORLD object. Invent exactly 4 battle moves that come",
   "from that object's true physical properties, materials, uses, or science.",
-  "Make them fun and punchy like Pokemon moves, but each must teach something REAL.",
+  "Make them fun and punchy like Pokemon moves.",
   "Vary the moves: include strong/risky ones (high power, lower accuracy), reliable ones,",
   "and at least one 'status' move (buff/defense/heal-ish, power can be 0).",
+  "The blurb must be SUPER SIMPLE: 3-6 easy words a 7-year-old understands, plain language",
+  "saying what the move does. Keep the real-world idea but say it the easy way",
+  '(e.g. "splashes water to put out fire", "heavy metal smash", "blocks the next hit").',
+  "No jargon, no formulas, no big words.",
   "Respond with ONLY a JSON array (no markdown fences) of 4 objects, each EXACTLY:",
-  '{"name":"<<=18 chars>","power":<integer 0-40>,"accuracy":<integer 70-100>,"kind":"physical"|"special"|"status","emoji":"<1 emoji>","blurb":"<<=14 word real-world science reason>"}',
+  '{"name":"<<=18 chars>","power":<integer 0-40>,"accuracy":<integer 70-100>,"kind":"physical"|"special"|"status","emoji":"<1 emoji>","blurb":"<3-6 simple words, what it does>"}',
 ].join(" ");
 
 export function movesUserPrompt(object: string): string {

@@ -113,15 +113,27 @@ export default function Home() {
     return () => clearInterval(id);
   }, [player, refresh]);
 
-  // ---- Gating ----
+  // ---- Gating (all wrapped in the same phone-width frame as the app) ----
   if (status === "loading" || me === null) {
-    return <Splash />;
+    return (
+      <PhoneFrame>
+        <Splash />
+      </PhoneFrame>
+    );
   }
   if (!me.authenticated) {
-    return <SignIn />;
+    return (
+      <PhoneFrame>
+        <SignIn />
+      </PhoneFrame>
+    );
   }
   if (me.needsUsername || !me.username) {
-    return <UsernameSetup onDone={loadMe} />;
+    return (
+      <PhoneFrame>
+        <UsernameSetup onDone={loadMe} />
+      </PhoneFrame>
+    );
   }
 
   return (
@@ -156,9 +168,20 @@ export default function Home() {
   );
 }
 
+/** Shared phone-width frame so every screen keeps the mobile aspect ratio. */
+function PhoneFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="flex min-h-[100dvh] w-full justify-center bg-anymon-ink">
+      <div className="relative h-[100dvh] w-full max-w-md overflow-hidden bg-anymon-cloud shadow-2xl">
+        {children}
+      </div>
+    </main>
+  );
+}
+
 function Splash() {
   return (
-    <div className="flex h-[100dvh] w-full flex-col items-center justify-center gap-6 bg-gradient-to-b from-anymon-ocean to-anymon-lime text-white">
+    <div className="flex h-full w-full flex-col items-center justify-center gap-6 bg-gradient-to-b from-anymon-ocean to-anymon-lime text-white">
       <Image
         src="/logos/anymon.png"
         alt="anyMon!"

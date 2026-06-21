@@ -91,31 +91,89 @@ function useAutoFit(object3d: THREE.Object3D, targetHeight: number) {
   }, [object3d, targetHeight]);
 }
 
+// Map a roamer's real distance (m, within NEARBY_RADIUS_M) to readable depth
+// cues: near = big + fully opaque + grounded, far = small + faded + lifted.
+function depthCues(distM: number) {
+  const t = clamp(distM, 0, NEARBY_RADIUS_M) / NEARBY_RADIUS_M; // 0 near .. 1 far
+  return {
+    height: THREE.MathUtils.lerp(1.8, 0.55, t), // noticeable scale range
+    opacity: THREE.MathUtils.lerp(1, 0.55, t),
+    lift: THREE.MathUtils.lerp(0.55, 1.15, t), // far ones sit higher (horizon)
+  };
+}
+
 // ---- a roaming wild Anymon rendered from its GLB ----
-function WildModel({ glbUrl }: { glbUrl: string }) {
+function WildModel({
+  glbUrl,
+  height,
+  opacity,
+  lift,
+}: {
+  glbUrl: string;
+  height: number;
+  opacity: number;
+  lift: number;
+}) {
   const { scene } = useGLTF(glbUrl);
-  const cloned = useMemo(() => scene.clone(true), [scene]);
-  const { scale, center } = useAutoFit(cloned, 1.3);
+  // Clone materials too so per-roamer opacity doesn't bleed across instances.
+  const cloned = useMemo(() => {
+    const c = scene.clone(true);
+    c.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh && mesh.material) {
+        mesh.material = Array.isArray(mesh.material)
+          ? mesh.material.map((m) => m.clone())
+          : mesh.material.clone();
+      }
+    });
+    return c;
+  }, [scene]);
+  const { scale, center } = useAutoFit(cloned, height);
+
+  useEffect(() => {
+    cloned.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      const mat = mesh.material as THREE.Material | THREE.Material[] | undefined;
+      if (!mat) return;
+      const apply = (m: THREE.Material) => {
+        m.transparent = opacity < 1;
+        m.opacity = opacity;
+        m.depthWrite = opacity >= 1;
+      };
+      Array.isArray(mat) ? mat.forEach(apply) : apply(mat);
+    });
+  }, [cloned, opacity]);
+
   return (
     <group
       scale={scale}
-      position={[-center.x * scale, -center.y * scale + 0.65, -center.z * scale]}
+      position={[-center.x * scale, -center.y * scale + lift, -center.z * scale]}
     >
       <primitive object={cloned} />
     </group>
   );
 }
 
-function WildSprite({ sprite }: { sprite: string }) {
+function WildSprite({
+  sprite,
+  height = 1.4,
+  opacity = 1,
+  lift = 0.85,
+}: {
+  sprite: string;
+  height?: number;
+  opacity?: number;
+  lift?: number;
+}) {
   const tex = useTexture(sprite);
   useEffect(() => {
     tex.colorSpace = THREE.SRGBColorSpace;
   }, [tex]);
   return (
-    <Billboard position={[0, 0.85, 0]}>
+    <Billboard position={[0, lift, 0]}>
       <mesh>
-        <planeGeometry args={[1.4, 1.4]} />
-        <meshBasicMaterial map={tex} transparent alphaTest={0.5} />
+        <planeGeometry args={[height, height]} />
+        <meshBasicMaterial map={tex} transparent alphaTest={0.4} opacity={opacity} />
       </mesh>
     </Billboard>
   );
@@ -168,7 +226,15 @@ function WildEntity({
   const wanderRef = useRef<THREE.Group>(null);
   useWander(wanderRef, x + z);
 
-  const sprite = <WildSprite sprite={wild.spriteDataUri} />;
+  const { height, opacity, lift } = depthCues(wild.distM);
+  const sprite = (
+    <WildSprite
+      sprite={wild.spriteDataUri}
+      height={height}
+      opacity={opacity}
+      lift={lift}
+    />
+  );
 
   return (
     <group position={[x, 0, z]}>
@@ -176,22 +242,27 @@ function WildEntity({
         <Suspense fallback={sprite}>
           {wild.ready && wild.glbUrl ? (
             <ModelErrorBoundary fallback={sprite}>
-              <WildModel glbUrl={wild.glbUrl} />
+              <WildModel
+                glbUrl={wild.glbUrl}
+                height={height}
+                opacity={opacity}
+                lift={lift}
+              />
             </ModelErrorBoundary>
           ) : (
             sprite
           )}
         </Suspense>
-        <Html position={[0, 1.9, 0]} center distanceFactor={9} occlude={false}>
+        <Html position={[0, lift + height + 0.4, 0]} center distanceFactor={9} occlude={false}>
           <div className="pointer-events-auto flex select-none flex-col items-center gap-1">
             <button
               onClick={() => onEngage(wild.id)}
               disabled={busy}
-              className="rounded-md border-2 border-anymon-ink bg-anymon-lime px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-anymon-ink shadow-retro disabled:opacity-60"
+              className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-ink shadow-retro disabled:opacity-60"
             >
               {busy ? "…" : "capture"}
             </button>
-            <div className="whitespace-nowrap rounded bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] font-bold text-anymon-white">
+            <div className="whitespace-nowrap rounded-gummy bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] text-anymon-white">
               {wild.name} · {wild.distM}m
             </div>
           </div>
@@ -262,11 +333,11 @@ function TrainerEntity({
           <button
             onClick={() => onChallenge(trainer.userId)}
             disabled={busy}
-            className="rounded-md border-2 border-anymon-ink bg-anymon-berry px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-anymon-white shadow-retro disabled:opacity-60"
+            className="rounded-gummy border-2 border-anymon-edgeberry bg-anymon-berry px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-white shadow-retro-berry disabled:opacity-60"
           >
             {busy ? "…" : "challenge"}
           </button>
-          <div className="whitespace-nowrap rounded bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] font-bold text-anymon-white">
+          <div className="whitespace-nowrap rounded-gummy bg-anymon-ink/80 px-1.5 py-0.5 text-[10px] text-anymon-white">
             Trainer {trainer.username} · {trainer.distM}m
           </div>
         </div>
@@ -350,7 +421,7 @@ export default function ArScene({
             blur={2.4}
             far={8}
             opacity={0.45}
-            color="#0a1418"
+            color="#04222a"
           />
           {wild.map((w, i) => (
             <WildEntity

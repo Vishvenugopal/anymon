@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import AnymonCanvas from "./AnymonCanvas";
 import {
   apiPvpCancel,
   apiPvpMove,
@@ -9,7 +10,7 @@ import {
   apiPvpRoom,
   type BattleRoom,
 } from "@/lib/client";
-import type { BattleFighter } from "@/lib/types";
+import type { BattleFighter, MoveKind } from "@/lib/types";
 
 const POLL_MS = 1000;
 
@@ -19,20 +20,53 @@ function hpColor(pct: number): string {
   return "bg-red-500";
 }
 
+// Classic Pokemon-style move-tile coloring, on-brand with cohesive edges.
+function moveTileClass(kind: MoveKind): string {
+  if (kind === "status")
+    return "bg-anymon-berry border-anymon-edgeberry text-anymon-white";
+  if (kind === "special")
+    return "bg-anymon-ocean border-anymon-edgeocean text-anymon-white";
+  return "bg-anymon-lime border-anymon-edgelime text-anymon-ink";
+}
+
+/** On-brand combatant stage: 3D model (sprite fallback) on a platform. */
+function Fighter({
+  f,
+  size,
+  bob = false,
+}: {
+  f: BattleFighter;
+  size: string;
+  bob?: boolean;
+}) {
+  return (
+    <div className={`flex flex-col items-center ${bob ? "animate-bob" : ""}`}>
+      <div className={`relative ${size}`}>
+        <AnymonCanvas
+          glbUrl={f.glbUrl}
+          spriteFallback={f.spriteDataUri}
+          className="h-full w-full drop-shadow-[0_6px_4px_rgba(10,20,24,0.45)]"
+        />
+      </div>
+      <div className="-mt-2 h-3 w-16 rounded-full bg-black/35 blur-[3px]" />
+    </div>
+  );
+}
+
 function HpBar({ f }: { f: BattleFighter }) {
   const pct = Math.max(0, Math.round((f.hp / f.maxHp) * 100));
   return (
-    <div className="rounded-2xl bg-white/90 px-3 py-2 shadow-gummy">
+    <div className="rounded-gummy border-2 border-anymon-edgecloud bg-white/95 px-3 py-2 shadow-retro">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate font-bold text-anymon-ink">{f.name}</span>
+        <span className="truncate text-anymon-ink">{f.name}</span>
         <span className="font-retro text-[10px] text-anymon-ink/60">
           {Math.max(0, f.hp)}/{f.maxHp}
         </span>
       </div>
-      <div className="text-[9px] font-semibold uppercase tracking-wide text-anymon-ink/50">
+      <div className="preserve-case text-[9px] uppercase tracking-wide text-anymon-ink/50">
         Trainer {f.username}
       </div>
-      <div className="mt-1 h-2.5 w-40 max-w-[42vw] overflow-hidden rounded-full bg-black/15">
+      <div className="mt-1 h-2.5 w-40 max-w-[42vw] overflow-hidden rounded-full border border-anymon-edgecloud bg-anymon-ink/10">
         <motion.div
           className={`h-full rounded-full ${hpColor(pct)}`}
           animate={{ width: `${pct}%` }}
@@ -133,15 +167,18 @@ export default function PvpBattleScreen({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-50 flex flex-col bg-gradient-to-b from-anymon-ink via-anymon-ink to-anymon-berry/40"
+      className="absolute inset-0 z-50 flex flex-col overflow-hidden bg-gradient-to-b from-[#0a1418] via-[#0c2630] to-[#3a0f17]"
     >
-      <div className="flex items-center justify-between px-4 pt-4">
+      {/* fully OPAQUE Persona-style arena (no see-through to the camera) */}
+      <div className="pointer-events-none absolute inset-0 scanner-pixels opacity-20" />
+
+      <div className="relative z-10 flex items-center justify-between px-4 pt-4">
         <div className="font-retro text-sm tracking-widest text-anymon-lime">
           trainer battle
         </div>
         <button
           onClick={cancel}
-          className="rounded-md border-2 border-anymon-white/40 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-anymon-white/80"
+          className="rounded-gummy border-2 border-anymon-white/40 px-2 py-0.5 text-[11px] uppercase tracking-wide text-anymon-white/80"
         >
           {room?.status === "active" ? "forfeit" : "leave"}
         </button>
@@ -149,14 +186,9 @@ export default function PvpBattleScreen({
 
       {/* invite handshake */}
       {amInvitee && room && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center text-anymon-white">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={room.challenger.spriteDataUri}
-            alt={room.challenger.name}
-            className="h-28 w-28 animate-bob object-contain drop-shadow-lg"
-          />
-          <div className="text-lg font-bold">
+        <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center text-anymon-white">
+          <Fighter f={room.challenger} size="h-28 w-28" bob />
+          <div className="preserve-case text-lg">
             Trainer {room.challenger.username} challenges you!
           </div>
           <div className="text-sm opacity-80">
@@ -171,14 +203,14 @@ export default function PvpBattleScreen({
             <button
               onClick={() => respond(true)}
               disabled={submitting || !myFighterId}
-              className="rounded-lg border-2 border-anymon-ink bg-anymon-lime px-5 py-2 font-bold uppercase tracking-wide text-anymon-ink shadow-retro disabled:opacity-50"
+              className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-5 py-2 uppercase tracking-wide text-anymon-ink shadow-retro disabled:opacity-50"
             >
               accept
             </button>
             <button
               onClick={() => respond(false)}
               disabled={submitting}
-              className="rounded-lg border-2 border-anymon-white/40 px-5 py-2 font-bold uppercase tracking-wide text-anymon-white/80"
+              className="rounded-gummy border-2 border-anymon-white/40 px-5 py-2 uppercase tracking-wide text-anymon-white/80"
             >
               decline
             </button>
@@ -188,14 +220,9 @@ export default function PvpBattleScreen({
 
       {/* challenger waiting */}
       {room?.status === "pending" && meIsChallenger && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center text-anymon-white">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={room.challenger.spriteDataUri}
-            alt={room.challenger.name}
-            className="h-28 w-28 animate-bob object-contain drop-shadow-lg"
-          />
-          <div className="text-lg font-bold">challenge sent!</div>
+        <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center text-anymon-white">
+          <Fighter f={room.challenger} size="h-28 w-28" bob />
+          <div className="text-lg">challenge sent!</div>
           <div className="animate-pulse text-sm opacity-80">
             waiting for the other trainer to accept…
           </div>
@@ -204,13 +231,13 @@ export default function PvpBattleScreen({
 
       {/* declined / cancelled */}
       {room && (room.status === "declined" || room.status === "cancelled") && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center text-anymon-white">
-          <div className="text-lg font-bold">
+        <div className="relative z-10 flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center text-anymon-white">
+          <div className="text-lg">
             {room.status === "declined" ? "challenge declined" : "battle cancelled"}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg border-2 border-anymon-ink bg-anymon-lime px-6 py-2 font-bold uppercase tracking-wide text-anymon-ink shadow-retro"
+            className="rounded-gummy border-2 border-anymon-edgelime bg-anymon-lime px-6 py-2 uppercase tracking-wide text-anymon-ink shadow-retro"
           >
             ok
           </button>
@@ -220,27 +247,17 @@ export default function PvpBattleScreen({
       {/* active / finished battle field */}
       {room && (room.status === "active" || room.status === "finished") && myFighter && foeFighter && (
         <>
-          <div className="relative flex items-start justify-between px-4 pt-4">
+          <div className="relative z-10 flex items-start justify-between px-4 pt-4">
             <HpBar f={foeFighter} />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={foeFighter.spriteDataUri}
-              alt={foeFighter.name}
-              className="h-24 w-24 object-contain drop-shadow-lg"
-            />
+            <Fighter f={foeFighter} size="h-24 w-24" />
           </div>
-          <div className="relative mt-2 flex items-end justify-between px-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={myFighter.spriteDataUri}
-              alt={myFighter.name}
-              className="h-28 w-28 object-contain drop-shadow-lg"
-            />
+          <div className="relative z-10 mt-2 flex items-end justify-between px-4">
+            <Fighter f={myFighter} size="h-28 w-28" />
             <HpBar f={myFighter} />
           </div>
 
-          <div className="mt-auto">
-            <div className="mx-3 mb-2 min-h-[4.5rem] space-y-1 rounded-gummy border-2 border-anymon-ink/10 bg-white/95 p-3 text-sm font-medium text-anymon-ink shadow-gummy">
+          <div className="relative z-10 mt-auto p-3">
+            <div className="mb-2 min-h-[4.25rem] space-y-1 rounded-gummy border-2 border-anymon-edgeink bg-anymon-cloud p-3 text-sm text-anymon-ink shadow-retro">
               {lastEntries.map((e, i) => (
                 <div key={i}>
                   <div>{e.text}</div>
@@ -253,7 +270,7 @@ export default function PvpBattleScreen({
               ))}
             </div>
 
-            <div className="rounded-t-gummy bg-anymon-ink/95 p-3">
+            <div className="rounded-gummy border-2 border-anymon-edgeink bg-anymon-ink p-2 shadow-retro">
               {room.status === "finished" ? (
                 <ResultPanel room={room} youWon={room.winnerId === me.id} onClose={onClose} />
               ) : myTurn ? (
@@ -263,17 +280,19 @@ export default function PvpBattleScreen({
                       key={m.name}
                       onClick={() => playMove(m.name)}
                       disabled={submitting}
-                      className="group flex flex-col rounded-2xl bg-white px-3 py-2 text-left transition active:scale-95 disabled:opacity-60"
+                      className={`retro-btn flex flex-col items-start gap-0.5 px-3 py-2 text-left ${moveTileClass(
+                        m.kind,
+                      )}`}
                     >
-                      <span className="font-bold leading-tight text-anymon-ink">
+                      <span className="text-sm leading-tight">
                         {m.emoji} {m.name}
                       </span>
-                      <span className="font-retro text-[9px] tracking-wider text-anymon-ocean">
+                      <span className="font-retro text-[9px] tracking-wider opacity-80">
                         {m.kind === "status"
                           ? `support · acc ${m.accuracy}`
                           : `pow ${m.power} · acc ${m.accuracy}`}
                       </span>
-                      <span className="mt-0.5 line-clamp-2 text-[10px] leading-snug text-anymon-ink/55">
+                      <span className="line-clamp-2 text-[10px] leading-snug opacity-90">
                         {m.blurb}
                       </span>
                     </button>
@@ -290,7 +309,7 @@ export default function PvpBattleScreen({
       )}
 
       {!room && (
-        <div className="flex flex-1 items-center justify-center text-anymon-white/80">
+        <div className="relative z-10 flex flex-1 items-center justify-center text-anymon-white/80">
           connecting…
         </div>
       )}
@@ -322,7 +341,7 @@ function ResultPanel({
       >
         <div
           className={`font-retro text-lg tracking-widest ${
-            youWon ? "text-anymon-lime" : "text-red-400"
+            youWon ? "text-anymon-lime" : "text-anymon-berry"
           }`}
         >
           {youWon ? "victory!" : "defeated!"}

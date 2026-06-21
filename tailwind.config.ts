@@ -21,6 +21,18 @@ const config: Config = {
           // near-black for chunky borders + text
           ink: "#0a1418",
           cloud: "#f3fbf4",
+          // collectible-card base (warm red, never black/ink)
+          card: "#E24040",
+          // ---- cohesive outline tokens ----
+          // Each is a DARKER + COOLER shade of the matching fill so outlines
+          // read as a tasteful "edge" instead of a clashing pure-black border.
+          edgelime: "#4E8F2C",
+          edgeberry: "#C42A46",
+          edgeocean: "#2C83A6",
+          edgecloud: "#C2D5CC",
+          edgecard: "#B23647",
+          // for dark/ink panels: a deep cool teal-black (not pure black)
+          edgeink: "#04222a",
         },
       },
       fontFamily: {
@@ -28,15 +40,17 @@ const config: Config = {
         retro: ["Doto", "ui-monospace", "monospace"],
       },
       boxShadow: {
-        gummy: "0 8px 0 0 rgba(0,0,0,0.85), 0 14px 24px -8px rgba(0,0,0,0.45)",
-        "gummy-lime": "0 8px 0 0 #5CA30F, 0 14px 22px -8px rgba(139,224,30,0.45)",
-        // hard, angular offset shadows for the retro / Persona look
-        retro: "4px 4px 0 0 #0a1418",
-        "retro-lg": "6px 6px 0 0 #0a1418",
-        "retro-berry": "5px 5px 0 0 #FF3B53",
+        // subtler gummy depth (smaller offset + tighter blur, tinted to ink)
+        gummy: "0 4px 0 0 rgba(10,20,24,0.55), 0 8px 14px -8px rgba(10,20,24,0.35)",
+        "gummy-lime": "0 4px 0 0 #4E8F2C, 0 8px 12px -8px rgba(139,224,30,0.4)",
+        // hard, angular offset shadows for the retro / Persona look (smaller)
+        retro: "3px 3px 0 0 #04222a",
+        "retro-lg": "4px 4px 0 0 #04222a",
+        "retro-berry": "3px 3px 0 0 #C42A46",
       },
       borderRadius: {
-        gummy: "2rem",
+        // single standardized app-wide corner radius (cards opt out -> sharp)
+        gummy: "1rem",
       },
       keyframes: {
         bob: {

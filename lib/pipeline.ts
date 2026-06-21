@@ -134,8 +134,11 @@ export async function resolveGlb(
       return { status: "ready", glbUrl: task.glbUrl, progress: 100 };
     }
     if (task.status === "FAILED" || task.status === "CANCELED") {
-      // Don't dead-end the demo: hand back a sample model.
-      return { status: "ready", glbUrl: sampleGlb(hash(a.id)), progress: 100 };
+      // A real provider genuinely failed. Surface it as failed rather than
+      // silently swapping in a random sample GLB (the placeholder bug). The UI
+      // can prompt a re-capture / retry instead of showing a Duck/Avocado.
+      console.error(`resolveGlb: ${provider()} task ${a.meshyTaskId} ${task.status}`);
+      return { status: "failed", glbUrl: null, progress: 100 };
     }
     return { status: "incubating", glbUrl: null, progress: task.progress };
   } catch (e) {

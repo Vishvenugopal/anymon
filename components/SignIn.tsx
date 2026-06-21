@@ -33,28 +33,33 @@ export default function SignIn() {
   };
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col items-center justify-center bg-gradient-to-b from-anymon-ocean to-anymon-lime p-8 text-white">
-      <motion.div
-        initial={{ scale: 0.8, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        className="w-[60%] max-w-[220px]"
-      >
-        <Image
-          src="/logos/anymon.png"
-          alt="anyMon!"
-          width={440}
-          height={220}
-          priority
-          className="h-auto w-full object-contain"
-        />
-      </motion.div>
-      <p className="mt-4 text-center text-white/90">
-        turn real objects into 3d monsters.
-        <br />
-        battle. learn. collect.
-      </p>
+    <div className="flex h-full w-full flex-col bg-gradient-to-b from-anymon-ocean to-anymon-lime text-white">
+      {/* Logo is pinned in a non-shrinking header so it's ALWAYS visible. */}
+      <div className="flex shrink-0 justify-center px-8 pb-2 pt-12">
+        <motion.div
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="w-[60%] max-w-[220px]"
+        >
+          <Image
+            src="/logos/anymon.png"
+            alt="anyMon!"
+            width={440}
+            height={220}
+            priority
+            className="h-auto w-full object-contain"
+          />
+        </motion.div>
+      </div>
 
-      <div className="mt-10 w-full max-w-xs space-y-3">
+      <div className="no-scrollbar flex flex-1 flex-col items-center justify-center overflow-y-auto px-8 pb-10">
+        <p className="text-center text-white/90">
+          turn real objects into 3d monsters.
+          <br />
+          battle. learn. collect.
+        </p>
+
+        <div className="mt-10 w-full max-w-xs space-y-3">
         <button
           onClick={() => go("google")}
           disabled={!!busy}
@@ -70,13 +75,14 @@ export default function SignIn() {
         >
           {busy === "guest" ? "entering…" : "continue as guest"}
         </button>
-      </div>
-
-      {error && (
-        <div className="mt-4 rounded-full bg-red-500/90 px-4 py-2 text-sm">
-          {error}
         </div>
-      )}
+
+        {error && (
+          <div className="mt-4 rounded-full bg-anymon-berry px-4 py-2 text-sm">
+            {error}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

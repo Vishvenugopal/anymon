@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { signOut } from "next-auth/react";
 import { motion } from "framer-motion";
 import { apiSetUsername } from "@/lib/client";
@@ -21,7 +22,20 @@ export default function UsernameSetup({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col items-center justify-center bg-anymon-cloud p-8">
+    <div className="flex h-full w-full flex-col bg-anymon-cloud">
+      {/* Logo pinned at the top so it stays visible on small screens. */}
+      <div className="flex shrink-0 justify-center px-8 pb-2 pt-10">
+        <Image
+          src="/logos/anymon.png"
+          alt="anyMon!"
+          width={440}
+          height={220}
+          priority
+          className="h-auto w-[52%] max-w-[200px] object-contain"
+        />
+      </div>
+
+      <div className="no-scrollbar flex flex-1 items-center justify-center overflow-y-auto p-8 pt-2">
       <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -34,7 +48,7 @@ export default function UsernameSetup({ onDone }: { onDone: () => void }) {
         </p>
 
         <form onSubmit={submit} className="mt-5">
-          <div className="flex items-center rounded-full border-2 border-anymon-cloud bg-anymon-cloud px-4 py-3">
+          <div className="flex items-center rounded-full border-2 border-anymon-edgecloud bg-anymon-cloud px-4 py-3">
             <span className="text-anymon-ink/40">@</span>
             <input
               autoFocus
@@ -71,6 +85,7 @@ export default function UsernameSetup({ onDone }: { onDone: () => void }) {
           sign out
         </button>
       </motion.div>
+      </div>
     </div>
   );
 }
