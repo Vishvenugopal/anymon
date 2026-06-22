@@ -36,16 +36,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "bad coords" }, { status: 400 });
     }
     const store = getStore();
-
-    const hits = await store.geoSearch(lng, lat, NEARBY_RADIUS_M);
-    const nearby = (
-      await Promise.all(hits.map((h) => store.getAnymon(h.id)))
-    ).filter((a): a is Anymon => !!a);
-
-    // Remove OUTDATED seed placeholders (previous versions used random sample
-    // models with mismatched names) so they get replaced by the current set.
     let removed = 0;
-    for (const a of nearby) {
+
+    // 1) GLOBAL cleanup — delete every OUTDATED-version seed placeholder anywhere
+    //    (not just nearby), so old sets left at previously-visited spots during
+    //    earlier sessions can never reappear as duplicates.
+    for (const a of await store.allAnymons()) {
       if (a.ownerId.startsWith("seed:") && !a.ownerId.startsWith(`seed:${SEED_VERSION}:`)) {
         await store.geoRemove(a.id);
         await store.deleteAnymon(a.id);
@@ -53,11 +49,26 @@ export async function POST(req: Request) {
       }
     }
 
-    // Already seeded this version here? Don't stack.
-    const haveCurrent = nearby.some((a) =>
-      a.ownerId.startsWith(`seed:${SEED_VERSION}:`),
-    );
-    if (haveCurrent) {
+    // 2) De-dupe current-version seeds near here by owner — each starter should
+    //    appear at most once in an area (guards against any double-seeding).
+    const hits = await store.geoSearch(lng, lat, NEARBY_RADIUS_M);
+    const nearby = (
+      await Promise.all(hits.map((h) => store.getAnymon(h.id)))
+    ).filter((a): a is Anymon => !!a);
+    const seenOwners = new Set<string>();
+    for (const a of nearby) {
+      if (!a.ownerId.startsWith(`seed:${SEED_VERSION}:`)) continue;
+      if (seenOwners.has(a.ownerId)) {
+        await store.geoRemove(a.id);
+        await store.deleteAnymon(a.id);
+        removed++;
+      } else {
+        seenOwners.add(a.ownerId);
+      }
+    }
+
+    // Already have current-version seeds here? Don't add another set.
+    if (seenOwners.size > 0) {
       return NextResponse.json({ ok: true, seeded: 0, removed });
     }
 
